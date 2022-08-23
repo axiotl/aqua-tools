@@ -8,6 +8,8 @@ function usage {
     echo "  -A PATH_TO_FIRST_BED_FILE \\"
     echo "  -B PATH_TO_SECOND_BED_FILE \\"
     echo " [-T PATH_TO_TAD_FILE] \\"
+    echo " [-d MIN_DROP_DISTANCE] \\"
+    echo " [-D MAX_DROP_DISTANCE] \\"
     echo " [-h]"
     echo "Use option -h|--help for more information"
 }
@@ -27,7 +29,8 @@ function help {
     echo "   -A|--bed_A      PATH_TO_FIRST_BED_FILE    : Path of the first bed file you want to build the bedpe of"
     echo "   -B|--bed_B      PATH_TO_SECOND_BED_FILE   : Path of the second bed file you want to build the bedpe of"
     echo "  [-T|--TAD      ] PATH_TO_TAD_FILE          : Path of the TAD file that checks if genomic regions fall within them"
-    echo "  [-D|--drop_dist] DROP_DISTANCE             : minimum distance between centers of pairs used to drop results"
+    echo "  [-d|--min_dist ] MIN_DROP_DISTANCE         : minimum distance between pairs used to drop results. Default 0 bp"
+    echo "  [-D|--max_dist ] MAX_DROP_DISTANCE         : maximum distance between pairs used to drop results. Default 5 Mb"
     echo "  [-h|--help     ] Help message"
     exit;
 }
@@ -46,7 +49,8 @@ for arg in "$@"; do
       "--bed_A")     set -- "$@" "-A" ;;
       "--bed_B")     set -- "$@" "-B" ;;
       "--TAD")       set -- "$@" "-T" ;;
-      "--drop_dist") set -- "$@" "-D" ;;
+      "--min_dist")  set -- "$@" "-d" ;;
+      "--max_dist")  set -- "$@" "-D" ;;
       "--help")      set -- "$@" "-h" ;;
        *)            set -- "$@" "$arg"
   esac
@@ -54,12 +58,13 @@ done
 
 
 
-while getopts ":A:B:T:D:h" OPT
+while getopts ":A:B:T:d:D:h" OPT
 do
     case $OPT in
   A) A=$OPTARG;;
   B) B=$OPTARG;;
   T) T=$OPTARG;;
+  d) d=$OPTARG;;
   D) D=$OPTARG;;
   h) help ;;
   \?)
@@ -75,9 +80,10 @@ do
     esac
 done
 
-if [ -z "$T" ]; then T="NULL"; fi
-if [ -z "$D" ]; then D=0;      fi
+if [ -z "$T" ]; then T="NULL";  fi
+if [ -z "$d" ]; then d=0;       fi
+if [ -z "$D" ]; then D=5000000; fi
 
-# printf "A: %s\nB: %s\nT: %s\nD: %s\n" $A $B $T $D
 
-Rscript $aqua_dir/build_bedpe.r $A $B $T $D
+
+Rscript $aqua_dir/build_bedpe.r $A $B $T $d $D
