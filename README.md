@@ -83,7 +83,7 @@ The two files above should be organized in the `home` directory as follows-
        ++ SAMPLE.allValidPairs.hic
        ++ mergeStats.txt
 ```
-If sample name is `GM12878` and the genome build it was processed with is `hg38`-
+If sample name is `GM12878` and the genome build it is processed with is `hg38`-
 ```
    + ~/lab-data/hg38
      + GM12878
