@@ -90,7 +90,7 @@ for arg in "$@"; do
 done
 
 
-Q=none
+Q=aqua
 R=5000
 f=center
 F=TRUE
