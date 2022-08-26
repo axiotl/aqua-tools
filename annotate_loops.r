@@ -293,12 +293,12 @@ obtain_one_sample_counts <- function( mat_1, txt_L, txt_R, midpoint_1, midpoint_
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size 
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size 
           
         return_obj <- list( 
           feet1  = c(new_start1, new_end1),
@@ -314,12 +314,12 @@ obtain_one_sample_counts <- function( mat_1, txt_L, txt_R, midpoint_1, midpoint_
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size 
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
           
         return_obj <- list( 
           feet1  = c(new_start1, new_end1),
@@ -335,12 +335,12 @@ obtain_one_sample_counts <- function( mat_1, txt_L, txt_R, midpoint_1, midpoint_
       new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
       new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
       
-      if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+      new_end1 <- new_end1 + bin_size
       
       new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
       new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
       
-      if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+      new_end2 <- new_end2 + bin_size
       
       return_obj <- list( 
         feet1  = c(new_start1, new_end1),
@@ -354,12 +354,12 @@ obtain_one_sample_counts <- function( mat_1, txt_L, txt_R, midpoint_1, midpoint_
       new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
       new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
       
-      if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+      new_end1 <- new_end1 + bin_size
       
       new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
       new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
       
-      if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+      new_end2 <- new_end2 + bin_size
       
       return_obj <- list( 
         feet1  = c(new_start1, new_end1),
@@ -877,11 +877,15 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       count_2 <- count_2 * norm_factor2 * aqua_factor2
       count_2 <- round( count_2 , 3 )
       
-      new_start1 <- as.numeric(mat_1[ 1 , "x" ])
-      new_end1   <- new_start1 + bin_size
+      new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+      new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
       
-      new_start2 <- as.numeric(mat_1[ 1 , "y" ])
-      new_end2   <- new_start2 + bin_size
+      new_end1 <- new_end1 + bin_size 
+      
+      new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+      new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+      
+      new_end2 <- new_end2 + bin_size 
       
     } 
     else if ( nrow( mat_1 ) >= 1 && nrow( mat_2 ) == 0 ){ 
@@ -925,23 +929,29 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         
         count_1    <- sparse_mat_1[ as.character(midpoint_2) , as.character(midpoint_1) ]
         
-        new_start1 <- as.numeric(midpoint_2)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- as.numeric(midpoint_1)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size 
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size 
         
       } else if( formula == "max"){
         
         count_1    <- max( sparse_mat_1, na.rm = T )
         
-        new_start1 <- rownames(sparse_mat_1)[ as.integer(which( max(sparse_mat_1) == sparse_mat_1, arr.ind = T )[1,1]) ]
-        new_start1 <- as.numeric(new_start1)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- colnames(sparse_mat_1)[ as.integer(which( max(sparse_mat_1) == sparse_mat_1, arr.ind = T )[1,2]) ]
-        new_start2 <- as.numeric(new_start2)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size 
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size 
         
       } else if( formula == "sum"){
         
@@ -950,12 +960,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size 
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size 
         
       } else if( formula == "average"){
         
@@ -964,12 +974,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size 
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size 
         
       }
       
@@ -1022,22 +1032,29 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         
         count_2    <- sparse_mat_2[ midpoint_2 , midpoint_1]
         
-        new_start1 <- as.numeric(midpoint_2)
-        new_end1   <- new_start1 + bin_size
-        new_start2 <- as.numeric(midpoint_1)
-        new_end2   <- new_start2 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
+        
+        new_end1 <- new_end1 + bin_size
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "max"){
         
         count_2    <- max( sparse_mat_2, na.rm = T )
         
-        new_start1 <- rownames(sparse_mat_2)[ as.integer(which( max(sparse_mat_2) == sparse_mat_2, arr.ind = T )[1,1]) ]
-        new_start1 <- as.numeric(new_start1)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- colnames(sparse_mat_2)[ as.integer(which( max(sparse_mat_2) == sparse_mat_2, arr.ind = T )[1,2]) ]
-        new_start2 <- as.numeric(new_start2)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size 
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "sum"){
         
@@ -1046,12 +1063,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size 
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "average"){
         
@@ -1060,12 +1077,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       }
       
@@ -1114,23 +1131,29 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         
         count_1    <- sparse_mat_1[ as.character(midpoint_2) , as.character(midpoint_1) ]
         
-        new_start1 <- as.numeric(midpoint_2)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- as.numeric(midpoint_1)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "max"){
         
         count_1    <- max( sparse_mat_1, na.rm = T )
         
-        new_start1 <- rownames(sparse_mat_1)[ as.integer(which( max(sparse_mat_1) == sparse_mat_1, arr.ind = T )[1,1]) ]
-        new_start1 <- as.numeric(new_start1)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- colnames(sparse_mat_1)[ as.integer(which( max(sparse_mat_1) == sparse_mat_1, arr.ind = T )[1,2]) ]
-        new_start2 <- as.numeric(new_start2)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "sum"){
         
@@ -1139,12 +1162,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "average"){
         
@@ -1153,12 +1176,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       }
       
@@ -1204,22 +1227,29 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         
         count_2    <- sparse_mat_2[ midpoint_2 , midpoint_1]
         
-        new_start1 <- as.numeric(midpoint_2)
-        new_end1   <- new_start1 + bin_size
-        new_start2 <- as.numeric(midpoint_1)
-        new_end2   <- new_start2 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
+        
+        new_end1 <- new_end1 + bin_size
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "max"){
         
         count_2    <- max( sparse_mat_2, na.rm = T )
         
-        new_start1 <- rownames(sparse_mat_2)[ as.integer(which( max(sparse_mat_2) == sparse_mat_2, arr.ind = T )[1,1]) ]
-        new_start1 <- as.numeric(new_start1)
-        new_end1   <- new_start1 + bin_size
+        new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
+        new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        new_start2 <- colnames(sparse_mat_2)[ as.integer(which( max(sparse_mat_2) == sparse_mat_2, arr.ind = T )[1,2]) ]
-        new_start2 <- as.numeric(new_start2)
-        new_end2   <- new_start2 + bin_size
+        new_end1 <- new_end1 + bin_size
+        
+        new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
+        new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
+        
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "sum"){
         
@@ -1228,12 +1258,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       } else if( formula == "average"){
         
@@ -1242,12 +1272,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
         new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
         new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
         
-        if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+        new_end1 <- new_end1 + bin_size
         
         new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
         new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
         
-        if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+        new_end2 <- new_end2 + bin_size
         
       }
       
@@ -1263,12 +1293,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
       new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
       
-      if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+      new_end1 <- new_end1 + bin_size
       
       new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
       new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
       
-      if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+      new_end2 <- new_end2 + bin_size
       
     } 
     else { 
@@ -1279,12 +1309,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       new_start1 <- as.numeric(unlist(strsplit(txt_L,":"))[2])
       new_end1   <- as.numeric(unlist(strsplit(txt_L,":"))[3])
       
-      if( new_start1 == new_end1 ){ new_end1 <- new_start1 + bin_size }
+      new_end1 <- new_end1 + bin_size 
       
       new_start2 <- as.numeric(unlist(strsplit(txt_R,":"))[2])
       new_end2   <- as.numeric(unlist(strsplit(txt_R,":"))[3])
       
-      if( new_start2 == new_end2 ){ new_end2 <- new_start2 + bin_size }
+      new_end2 <- new_end2 + bin_size
       
     }
     
