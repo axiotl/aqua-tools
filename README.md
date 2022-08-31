@@ -64,7 +64,7 @@ export PATH="$HOME/aqua_tools:$PATH"
 
 ## Data and Organization
 
-We use `.hic` files as the only format of data source. In addition, we need a `mergeStats.txt` file containing valid interaction read counts for human and mouse genome alignments. This is a modified version of a typical `.mergestat` file (an output of the [HiC-Pro](https://github.com/nservant/HiC-Pro) pipeline) that contains QC information for human and mouse PETs in one file. A `mergeStats.txt` file should look like the following-
+We use `.hic` files as the only format of data source. In addition, we need a `.mergeStats.txt` file containing valid interaction read counts for human and mouse genome alignments. This is a modified version of a typical `.mergestat` file (an output of the [HiC-Pro](https://github.com/nservant/HiC-Pro) pipeline) that contains QC information for human and mouse PETs in one file. A `.mergeStats.txt` file should look like the following-
 
 |  | GM12878.hg38 | GM12878.mm10 |
 | ---------- | -------- | ------ |
@@ -75,20 +75,18 @@ We use `.hic` files as the only format of data source. In addition, we need a `m
 | cis-shortRange       |  170608942   |  3506516  |
 | cis_longRange       |  23491704   |  991278  |
 
-The two files above should be organized in the `home` directory as follows- 
+The two files above should be housed in a folder named after the sample, and should strictly be names as follows- 
 
 ```
-   + ~/lab-data/GENOME_BUILD
-     + SAMPLE
-       ++ SAMPLE.allValidPairs.hic
-       ++ mergeStats.txt
+   + ~/SAMPLE
+       ++ SAMPLE.hic
+       ++ SAMPLE.mergeStats.txt
 ```
-If sample name is `GM12878` and the genome build it is processed with is `hg38`-
+If sample name is `GM12878`, the data structure should look like-
 ```
-   + ~/lab-data/hg38
-     + GM12878
-       ++ GM12878.allValidPairs.hic
-       ++ mergeStats.txt
+   + ~/GM12878
+       ++ GM12878.hic
+       ++ GM12878.mergeStats.txt
 ```
 
 Please contact [Axiotl Inc.](https://axiotl.com) for any further questions.

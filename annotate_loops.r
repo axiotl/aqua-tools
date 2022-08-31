@@ -1574,7 +1574,7 @@ bin_size    <- as.numeric(args[2])
 norm        <- "NONE"
 flag_debug  <- FALSE
 
-if( length(args) == 13 ){
+if( length(args) == 12 ){
   
   one_sample_analysis <-  TRUE
   two_sample_analysis <- FALSE
@@ -1582,21 +1582,20 @@ if( length(args) == 13 ){
   hic_A              <-  args[3]
   path_mergeStats_A  <-  args[4]
   flag_norm          <-  args[5]
-  genome             <-  args[6]
-  num_loops          <-  as.numeric(args[7])
-  formula            <-  args[8]
-  flag_fix           <-  as.logical(args[9])
-  split              <-  args[10]
-  shrink_wrap        <-  args[11]
-  padding            <-  as.numeric(args[12])
-  expand             <-  as.numeric(args[13])
+  num_loops          <-  as.numeric(args[6])
+  formula            <-  args[7]
+  flag_fix           <-  as.logical(args[8])
+  split              <-  args[9]
+  shrink_wrap        <-  args[10]
+  padding            <-  as.numeric(args[11])
+  expand             <-  as.numeric(args[12])
   
   hic_A_chroms      <-  readHicChroms(hic_A)$name
   
   if(formula == "mean"){ formula <- "average" }
 }
 
-if( length(args) == 15 ){
+if( length(args) == 14 ){
   
   one_sample_analysis <- FALSE
   two_sample_analysis <-  TRUE
@@ -1606,14 +1605,13 @@ if( length(args) == 15 ){
   hic_B             <-  args[5]
   path_mergeStats_B <-  args[6]
   flag_norm         <-  args[7]
-  genome            <-  args[8]
-  num_loops         <-  as.numeric(args[9])
-  formula           <-  args[10]
-  flag_fix          <-  as.logical(args[11])
-  split             <-  args[12]
-  shrink_wrap       <-  args[13]
-  padding           <-  as.numeric(args[14])
-  expand            <-  as.numeric(args[15])
+  num_loops         <-  as.numeric(args[8])
+  formula           <-  args[9]
+  flag_fix          <-  as.logical(args[10])
+  split             <-  args[11]
+  shrink_wrap       <-  args[12]
+  padding           <-  as.numeric(args[13])
+  expand            <-  as.numeric(args[14])
   
   hic_A_chroms      <- readHicChroms(hic_A)$name
   hic_B_chroms      <- readHicChroms(hic_B)$name
