@@ -4,8 +4,11 @@ OPTIND=1
 
 win_size=10
 
+data_dir=$HOME/lab-data
+aqua_dir=$HOME/aqua_tools
 
-aqua_dir=~/aqua_tools
+sample_sheet="$HOME/setup/sample_sheet.txt"
+
 
 juicer_tools='java -jar /home/ubuntu/juicer_tools_1.19.02.jar'
 
@@ -18,25 +21,25 @@ function usage {
 
 function help {
     echo 
-    echo "Create APA plot with AQuA normalized contact values"
+    echo "Create APA plot with CPM/AQuA normalized contact values"
     echo
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "    -P|--pair                    : Path to the bedpe (pairs) file you want to use."
-    echo "    -A|--sample1                 : Full path to folder that houses the .hic and mergestats files"
-    echo "    -O|--out-dir                 : Full path of the directory you want to store the output plots in"
-    echo " [  -B|--sample2             ]   : Full path to folder that houses the .hic and mergestats files. If triggered, plots the delta AQuA normalized values from both samples for that pair. Useful in case vs control"
-    echo " [     --cpml                ]   : No input required. If --cpml is specified, CPM and AQuA APA values get normalised by the number of loops in the bedpe"
-    echo " [     --bin_size            ]   : Bin size you want to use for the APA plots. If not specified, default 5000 will be used"
-    echo " [     --hard_cap_cpm        ]   : Upper limit of the CPM plot range. If not specified, upper limit will be calcualted using max bin value"
-    echo " [     --hard_cap_cpm_delta  ]   : Upper limit of the CPM delta plot range. Only for two sample analysis. If not specified, upper limit will be calcualted using max delta value"
-    echo " [     --hard_cap_aqua       ]   : Upper limit of the AQuA plot range. If not specified, upper limit will be calcualted using max bin value"
-    echo " [     --hard_cap_aqua_delta ]   : Upper limit of the AQuA delta plot range. Only for two sample analysis. If not specified, upper limit will be calcualted using max delta value"
-    echo " [  -h|--help                ]   : Help message"
+    echo "    -P|--pair                   : Path to the bedpe (pairs) file, without headers"
+    echo "    -A|--sample1                : Name of sample you want to use to create the plot"
+    echo "    -G|--genome                 : The genome build the sample(s) has been processed using. Strictly hg19, hg38, or mm10"
+    echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
+    echo " [  -B|--sample2             ]  : The name of the second sample. If triggered, plots the delta AQuA normalized values from both samples for that pair. Useful in case vs control"
+    echo " [  -Q|--norm                ]  : Which normalization to use. Strictly 'cpm', 'aqua', or 'none'  in lower case. Non-spike-in samples default to cpm. Spike-in samples default to aqua."
+    echo " [     --bin_size            ]  : Bin size you want to use for the APA plots. If not specified, default 5000 will be used"
+    echo " [     --max_cap             ]  : Upper limit of the plot range. If not specified, upper limit will be calculated using max bin value"
+    echo " [     --min_cap             ]  : Lower limit of the plot range. If not specified, lower limit is 0"
+    echo " [     --max_cap_delta       ]  : Upper limit of the delta plot range. If not specified, upper limit will be calculated using max bin value. For two-sample analyses only."
+    echo " [     --loop_norm           ]  : If TRUE, APA values are normalized by the number of loops in the bedpe file. Default FALSE"
+    echo " [  -h|--help                ]   Help message"
     exit;
 }
-
 
 if [ $# -lt 1 ]
     then
@@ -51,39 +54,40 @@ for arg in "$@"; do
   case "$arg" in
       "--pair")                 set -- "$@" "-P" ;;
       "--sample1")              set -- "$@" "-A" ;;
+      "--genome")               set -- "$@" "-G" ;;
       "--out-dir")              set -- "$@" "-O" ;;
-      "--help")                 set -- "$@" "-h" ;;
       "--sample2")              set -- "$@" "-B" ;;
-      "--cpml")                 set -- "$@" "-N" ;;
+      "--norm")                 set -- "$@" "-Q" ;;
       "--bin_size")             set -- "$@" "-b" ;;
-      "--hard_cap_cpm")         set -- "$@" "-c" ;;
-      "--hard_cap_cpm_delta")   set -- "$@" "-e" ;;
-      "--hard_cap_aqua")        set -- "$@" "-a" ;;
-      "--hard_cap_aqua_delta")  set -- "$@" "-d" ;;
+      "--max_cap")              set -- "$@" "-c" ;;
+      "--min_cap")              set -- "$@" "-e" ;;
+      "--max_cap_delta")        set -- "$@" "-d" ;;
+      "--loop_norm")            set -- "$@" "-l" ;;
+      "--help")                 set -- "$@" "-h" ;;
        *)                       set -- "$@" "$arg"
   esac
 done
 
 b=5000
 c="no_cap"
-a="no_cap"
-e="no_cap"
 d="no_cap"
-N=0
+e="no_cap"
+l=FALSE
 
-while getopts ":P:A:B:O:b:c:a:e:d:Nh" OPT
+while getopts ":P:A:G:O:B:Q:b:c:e:d:f:l:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
   A) A=$OPTARG;;
+  G) G=$OPTARG;;
   B) B=$OPTARG;;
   O) O=$OPTARG;;
   b) b=$OPTARG;;
   c) c=$OPTARG;;
-  a) a=$OPTARG;;
-  e) e=$OPTARG;;
+  Q) Q=$OPTARG;;
+  l) l=$OPTARG;;
   d) d=$OPTARG;;
-  N) N=1;;
+  e) e=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -107,16 +111,6 @@ if [ -z "$B" ]; then
   esac
 fi
 
-
-# Do all necessary paramter checks
-#----------------------------------
-
-if [[ $b == 5000 ]]; then
- echo "Using default bin size 5000"
-else
- echo "Using bin size: ${b}" 
-fi
-
 #----------------------------------
 
 if [[ -z $P ]];
@@ -127,14 +121,14 @@ fi
 
 #----------------------------------
 
-col1=$(head -n 1  $P | cut -f 1 )
+col1=$(head -n 1  "$P" | cut -f 1 )
 col1="${col1:0:3}"
 
-col4=$(head -n 1  $P | cut -f 4 )
+col4=$(head -n 1  "$P" | cut -f 4 )
 col4="${col4:0:3}"
 
 
-if [[ $col1 != $col4  ]]; then
+if [[ $col1 != "$col4"  ]]; then
 echo "Please provide a 6-col bedpe file without headers"
 exit
 fi
@@ -147,9 +141,48 @@ then
     exit
 fi
 
+get_sample_directory() {
+
+    local input_sample_name="$1"
+    local base_sample_name
+    local sample_dir
+
+    if [[ "$input_sample_name" =~ _version_[0-9]+$ ]]; then
+        base_sample_name=$(echo "$input_sample_name" | grep -oP '.*(?=_version_[0-9]+$)' )
+        sample_dir="$data_dir/$G/$base_sample_name/$input_sample_name"
+    else
+        base_sample_name="$input_sample_name"
+         local sample_info=$(awk -F$'\t' -v sample="$base_sample_name" -v genome="$G" '$1 == sample && $6 == "1" && $2 == genome {print; exit}' "$sample_sheet")
+        if [ ! -z "$sample_info" ]; then
+            local version_number=$(echo "$sample_info" | cut -d$'\t' -f5)
+            sample_dir="$data_dir/$G/$base_sample_name/${base_sample_name}_version_${version_number}"
+        else
+            return 1
+        fi
+    fi
+
+    if [ -d "$sample_dir" ]; then
+        echo "$sample_dir"
+    else
+        return 1
+    fi
+}
+
+
+# Update sample A
+sample_dir_A=$(get_sample_directory "$A")
+if [ $? -eq 0 ]; then
+    version_dir_A=$(basename "$sample_dir_A")
+    base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+    A="${base_dir_A}/${version_dir_A}"
+else
+    echo "Sample directory not found. Exiting."
+    exit 1
+fi
+
 #----------------------------------
 
-if [[ -z $O ]];
+if [[ -z $G ]];
 then
     usage
     exit
@@ -157,7 +190,44 @@ fi
 
 #----------------------------------
 
+# Check if there is a parameter provided for -B
+if [[ -n $B ]]; then
+    # Get sample directory B
+    sample_dir_B=$(get_sample_directory "$B")
+    if [ $? -eq 0 ]; then
+        version_dir_B=$(basename "$sample_dir_B")
+        base_dir_B=$(basename "$(dirname "$sample_dir_B")")
+        B="${base_dir_B}/${version_dir_B}"
+    else
+        echo "Sample directory not found. Exiting."
+        exit 1
+    fi
+fi
 
+# Determine the generated output name based on whether -O is provided
+if [[ -z $O ]]; then
+    random_num=$RANDOM
+    
+    if [[ -n $B ]]; then
+        # For a two-sample test
+        O="${version_dir_A}_v_${version_dir_B}_APA_${random_num}"
+    else
+        # For a one-sample test
+        O="${version_dir_A}_APA_${random_num}"
+    fi
+    echo -e "\nNo output directory name provided. Generating output directory...\n"
+fi
+
+#----------------------------------
+
+if [ -n "$Q" ]; then
+    if [ "$Q" != "aqua" ] && [ "$Q" != "cpm" ] && [ "$Q" != "none" ]; then
+        echo -e "\nInvalid value for -Q|--norm. Please use 'aqua', 'cpm', or 'none' in lower case."
+        exit 1
+    fi
+else
+    Q="blank"
+fi
 
 
 
@@ -173,153 +243,49 @@ fi
 if [ -z "$B" ]
 then 
 
-
-
-# Do all necessary paramter checks
-#----------------------------------
-
-if [[ $c == "no_cap" ]]; then
- echo "No CPM hard cap for plotting specified"
-else
- echo "CPM hard cap: ${c}" 
-fi
-
-#----------------------------------
-
-if [[ $a == "no_cap" ]]; then
- echo "No AQuA hard cap for plotting specified"
-else
- echo "AQuA hard cap: ${a}" 
-fi
-
-#----------------------------------
-
-if [[ $e != "no_cap" ]]; then
- echo "Cannot have a delta cap in single-sample APA analysis"
- exit
-fi
-
 #----------------------------------
 
 if [[ $d != "no_cap" ]]; then
- echo "Cannot have a delta cap in single-sample APA analysis"
- exit
+  echo "Cannot have a delta cap in single-sample APA analysis"
+  exit
 fi
 
 #----------------------------------
 
 num_loops=`cat "$P" | wc -l`
 
-
-id=`basename $P`
-id_create=$(echo "$id" | cut -f 1 -d '.')
-
-if [[ $id_create == $id ]]; then
-  echo "Please add an extension to the input pairs file (a simple .txt would suffice), or consider changing output directory"
-  exit
-fi
-
-
-sample1=`basename $A`
-
-
-out_dir=$O/$id_create
-mkdir -p $out_dir
-out_dir=$out_dir/$sample1
-mkdir -p $out_dir
-mkdir -p $out_dir/$sample1
-
-
+out_dir="$O"
+mkdir -p "$out_dir"
 
 #----------------------------------
 
-pair1=$A/$sample1.hic
+pair1=$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic
 if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
 
 #----------------------------------
 
-stat1=$A/$sample1.mergeStats.txt
+stat1=$data_dir/$G/$A/mergeStats.txt
 if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
-#----------------------------------
-
-
-
-hg_total1=`head -3 $stat1 | tail -1 | cut -f2 | perl -nle 's/\r//g; print;'`
-mm_total1=`head -3 $stat1 | tail -1 | cut -f3 | perl -nle 's/\r//g; print;'`
-
-
-echo "total human reads for $sample1: $hg_total1"
-
-
-has_aqua=true
-total1=$hg_total1
-
-
-# AQuA Factor
-if [[ ! -z $mm_total1 ]];then
-  echo "We have spike-In"
-  total1=`echo "$hg_total1+$mm_total1" | bc`
-  aqua_factor1=`echo "scale=4;$hg_total1/$mm_total1" | bc`
-  echo "aqua_factor: $aqua_factor1"
-fi
-
-
-# Normalization factor
-norm_factor1=`echo "scale=10;1000000/$total1" | bc`
-echo "norm_factor: $norm_factor1"
-
-
 # Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
-echo "juicer_tools"
-$juicer_tools apa --threads 1 -k NONE -n 0 -r $b -w $win_size $pair1 $P $out_dir/$sample1 #&> /dev/null
+echo -e "\nBeginning APA...\n"
+$juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
+
+# Copying the generated APA.txt to APA_raw.txt
+out_mat=$out_dir/$b/gw/APA.txt
+mv "$out_mat" "$out_dir"/APA_raw.txt
 
 
-out_cpm_matrix1=$out_dir/$sample1/$b/gw/APA.cpm.txt
-out_aqua_matrix1=$out_dir/$sample1/$b/gw/APA.aqua.txt
+awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw.txt > "$out_dir"/APA_formatted.txt
 
-# If no --cpml
-if [[ $N == 0 ]]; then
+Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${version_dir_A}" "${c}" "${d}" "$out_dir/${version_dir_A}_APA.pdf" ${win_size} "${b}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
 
-echo "norm_factor"
-cat $out_dir/${sample1}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor1}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix1
-  
-echo "aqua_factor"
-cat $out_cpm_matrix1 | awk -v factor="${aqua_factor1}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix1
-
-
-Rscript $aqua_dir/plot_APA.r $out_cpm_matrix1  ${sample1} ${c} "HiChIP" $out_dir/APA_cpm.pdf   ${win_size} ${b} ${P}
-Rscript $aqua_dir/plot_APA.r $out_aqua_matrix1 ${sample1} ${a} "AQuA"   $out_dir/APA_aqua.pdf  ${win_size} ${b} ${P}
+# Delete the specified directories and files after R script is called
+rm -r "$out_dir/$b"
+rm "$out_dir"/APA_raw.txt
+rm "$out_dir"/APA_formatted.txt
 
 fi
-
-# If --cpml
-if [[ $N == 1 ]]; then
-
-
-
-out_aqua_cpml_matrix1=$out_dir/$A/$b/gw/APA.aqua.cpml.txt
-
-echo "norm_factor"
-cat $out_dir/${sample1}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor1}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix1
-  
-echo "aqua_factor"
-cat $out_cpm_matrix1 | awk -v factor="${aqua_factor1}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix1
-
-echo "cpml"
-cat $out_aqua_matrix1 | awk -v factor="${num_loops}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)/=factor; print}' > $out_aqua_cpml_matrix1
-
-
-Rscript $aqua_dir/plot_APA.r $out_cpm_matrix1  ${sample1} ${c} "HiChIP"  $out_dir/APA_cpm.pdf  ${win_size} ${b} ${P}
-Rscript $aqua_dir/plot_APA.r $out_aqua_cpml_matrix1 ${sample1} ${c} "AQuA"  $out_dir/APA_aqua.pdf  ${win_size} ${b} ${P} 
-
-fi
-
-
-
-# end one-sample loop
-fi
-
 
 
 
@@ -336,166 +302,55 @@ fi
 if [ -n "$B" ]
 then 
 
+    # Do all necessary parameter checks
+
+    num_loops=`cat "$P" | wc -l`
+
+    out_dir=$O
+    mkdir -p "$out_dir"
+
+    #----------------------------------
+
+    pair1=$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic
+    pair2=$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic
+    if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
+    if [[ ! -f $pair2 ]]; then echo "cannot find $pair2"; exit 1; fi
+
+    #----------------------------------
+
+    stat1=$data_dir/$G/$A/mergeStats.txt
+    stat2=$data_dir/$G/$B/mergeStats.txt
+    if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
+    if [[ ! -f $stat2 ]]; then echo "cannot find $stat2"; exit 1; fi
+
+    #----------------------------------
+
+    # https://github.com/aidenlab/juicer/wiki/APA
+
+    echo -e "\nBeginning APA...\n"
+
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
+    out_mat_A=$out_dir/$b/gw/APA.txt
+    mv "$out_mat_A" "$out_dir"/APA_raw_${version_dir_A}.txt
+
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair2" "$P" "$out_dir" &> /dev/null
+    out_mat_B=$out_dir/$b/gw/APA.txt
+    mv "$out_mat_B" "$out_dir"/APA_raw_${version_dir_B}.txt
+
+    #----------------------------------
 
 
-# Do all necessary paramter checks
-#----------------------------------
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$version_dir_A.txt > "$out_dir"/APA_formatted_$version_dir_A.txt
 
-if [[ $c == "no_cap" ]]; then
- echo "No CPM hard cap for plotting specified"
-else
- echo "CPM hard cap: ${c}" 
-fi
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$version_dir_B.txt > "$out_dir"/APA_formatted_$version_dir_B.txt
 
-#----------------------------------
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$version_dir_A.txt" "$out_dir/APA_formatted_$version_dir_B.txt" "${version_dir_A}" "${version_dir_B}" "${c}" "${d}" $"$out_dir/${version_dir_A}_v_${version_dir_B}_APA.pdf" ${win_size} "${b}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
 
-if [[ $a == "no_cap" ]]; then
- echo "No AQuA hard cap for plotting specified"
-else
- echo "AQuA hard cap: ${a}" 
-fi
-
-#----------------------------------
-
-if [[ $e == "no_cap" ]]; then
- echo "No CPM delta hard cap for plotting specified"
-else
- echo "CPM delta hard cap: ${e}" 
-fi
-
-#----------------------------------
-
-if [[ $d == "no_cap" ]]; then
- echo "No AQuA delta hard cap for plotting specified"
-else
- echo "AQuA delta hard cap: ${d}" 
-fi
-
-#----------------------------------
-
-num_loops=`cat "$P" | wc -l`
-
-
-id=`basename $P`
-id_create=$(echo "$id" | cut -f 1 -d '.')
-
-if [[ $id_create == $id ]]; then
-  echo "Please add an extension to the input pairs file, or consider changing output directory"
-  exit
-fi
-
-
-sample1=`basename $A`
-sample2=`basename $B`
-
-out_dir=$O/$id_create
-mkdir -p $out_dir
-out_dir=$out_dir/${sample2}__vs__${sample1}
-mkdir -p $out_dir
-mkdir -p $out_dir/${sample2}
-mkdir -p $out_dir/${sample1}
-
-
-#----------------------------------
-
-pair1=$A/$sample1.hic
-pair2=$B/$sample2.hic
-if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
-if [[ ! -f $pair2 ]]; then echo "cannot find $pair2"; exit 1; fi
-
-#----------------------------------
-
-stat1=$A/$sample1.mergeStats.txt
-stat2=$B/$sample2.mergeStats.txt
-if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
-if [[ ! -f $stat2 ]]; then echo "cannot find $stat2"; exit 1; fi
-
-#----------------------------------
-
-
-
-hg_total1=`head -3 $stat1 | tail -1 | cut -f2 | perl -nle 's/\r//g; print;'`
-hg_total2=`head -3 $stat2 | tail -1 | cut -f2 | perl -nle 's/\r//g; print;'`
-mm_total1=`head -3 $stat1 | tail -1 | cut -f3 | perl -nle 's/\r//g; print;'`
-mm_total2=`head -3 $stat2 | tail -1 | cut -f3 | perl -nle 's/\r//g; print;'`
-
-echo "total human reads for $A: $hg_total1"
-echo "total human reads for $B: $hg_total2"
-echo "total mouse reads for $A: $mm_total1"
-echo "total mouse reads for $B: $mm_total2"
-
-has_aqua=true
-total1=$hg_total1
-total2=$hg_total2
-
-if [[ ! -z $mm_total1 && ! -z $mm_total2 ]];then
-  echo "We have spike-In"
-  total1=`echo "$hg_total1+$mm_total1" | bc`
-  total2=`echo "$hg_total2+$mm_total2" | bc`
-  aqua_factor1=`echo "scale=4;$hg_total1/$mm_total1" | bc`
-  aqua_factor2=`echo "scale=4;$hg_total2/$mm_total2" | bc`
-  echo "aqua_factor1: $aqua_factor1"
-  echo "aqua_factor2: $aqua_factor2"
-fi
-
-norm_factor1=`echo "scale=10;1000000/$total1" | bc`
-norm_factor2=`echo "scale=10;1000000/$total2" | bc`
-echo "norm_factor1: $norm_factor1"
-echo "norm_factor2: $norm_factor2"
-
-# https://github.com/aidenlab/juicer/wiki/APA
-
-echo "juicer_tools"
-$juicer_tools apa --threads 1 -k NONE -n 0 -r $b -w $win_size $pair1 $P $out_dir/$sample1 #&> /dev/null
-$juicer_tools apa --threads 1 -k NONE -n 0 -r $b -w $win_size $pair2 $P $out_dir/$sample2 #&> /dev/null
-
-
-out_cpm_matrix1=$out_dir/$sample1/$b/gw/APA.cpm.txt
-out_cpm_matrix2=$out_dir/$sample2/$b/gw/APA.cpm.txt
-out_aqua_matrix1=$out_dir/$sample1/$b/gw/APA.aqua.txt
-out_aqua_matrix2=$out_dir/$sample2/$b/gw/APA.aqua.txt
-
-# If no --cpml
-if [[ $N == 0 ]]; then
-
-echo "norm_factor"
-cat $out_dir/${sample1}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor1}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix1
-cat $out_dir/${sample2}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor2}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix2
-  
-echo "aqua_factor"
-cat $out_cpm_matrix1 | awk -v factor="${aqua_factor1}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix1
-cat $out_cpm_matrix2 | awk -v factor="${aqua_factor2}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix2
-
-Rscript $aqua_dir/plot_APA.r $out_cpm_matrix1  $out_cpm_matrix2  ${sample1} ${sample2} ${c} ${e} "HiChIP"  $out_dir/APA_cpm.pdf ${win_size} ${b} ${P}
-Rscript $aqua_dir/plot_APA.r $out_aqua_matrix1 $out_aqua_matrix2 ${sample1} ${sample2} ${a} ${d} "AQuA"    $out_dir/APA_aqua.pdf ${win_size} ${b} ${P}
-
-fi
-
-# If --cpml
-if [[ $N == 1 ]]; then
-
-out_aqua_cpml_matrix1=$out_dir/$sample1/$b/gw/APA.aqua.cpml.txt
-out_aqua_cpml_matrix2=$out_dir/$sample2/$b/gw/APA.aqua.cpml.txt
-
-echo "norm_factor"
-cat $out_dir/${sample1}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor1}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix1
-cat $out_dir/${sample2}/${b}/gw/APA.txt | tr -d '[]' | awk -v factor="${norm_factor2}" -F',' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_cpm_matrix2
-  
-echo "aqua_factor"
-cat $out_cpm_matrix1 | awk -v factor="${aqua_factor1}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix1
-cat $out_cpm_matrix2 | awk -v factor="${aqua_factor2}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)*=factor; print}' > $out_aqua_matrix2
-
-echo "cpml"
-cat $out_aqua_matrix1 | awk -v factor="${num_loops}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)/=factor; print}' > $out_aqua_cpml_matrix1
-cat $out_aqua_matrix2 | awk -v factor="${num_loops}" -F$'\t' 'BEGIN{OFS="\t"} {for(i=1;i<=NF;i++) $(i)/=factor; print}' > $out_aqua_cpml_matrix2
-
-
-Rscript $aqua_dir/plot_APA.r $out_cpm_matrix1  $out_cpm_matrix2  ${sample1} ${sample2} ${c} ${e} "HiChIP"  $out_dir/APA_cpm.pdf ${win_size} ${b} ${P}
-Rscript $aqua_dir/plot_APA.r $out_aqua_cpml_matrix1 $out_aqua_cpml_matrix2 ${sample1} ${sample2} ${a} ${d} "AQuA"  $out_dir/APA_aqua.pdf ${win_size} ${b} ${P}
-
-fi
-
-
-
+    # Delete the specified directories and files after R script is called
+    rm -r "$out_dir/$b"
+    rm "$out_dir"/APA_raw_$version_dir_A.txt
+    rm "$out_dir"/APA_raw_$version_dir_B.txt
+    rm "$out_dir"/APA_formatted_$version_dir_A.txt
+    rm "$out_dir"/APA_formatted_$version_dir_B.txt
 
 fi
