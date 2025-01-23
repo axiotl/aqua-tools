@@ -16,7 +16,7 @@ For more information, please reach us at hello@axiotl.com.
 
 ### Docker: 
 
-Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker is intalled on your machine. 
+Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker is installed on your machine. 
 
 Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
 
