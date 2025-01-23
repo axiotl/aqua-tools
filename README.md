@@ -18,19 +18,22 @@ Sample data and AQuA tools along with all their dependencies can be easily setup
 
 Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
 
+
+i. Set up working station
 ```
-## set up working station
 working_dir=$HOME/aqua_tools_container  # <-- change this path as per your convenience
 mkdir -p $working_dir
 cd $working_dir                         # <-- place the Dockerfile from GitHub in this directory
+```
 
-
-## build the image (this can take upto 30 minutes)
+ii. Build the image (this can take upto 30 minutes)
+```
 sudo docker build -t aqua_tools:1 .
+```
 
-
-## run the container and get started!
-# (once inside the container, consider keeping all outputs in ~/container_outputs to access them after exiting)
+iii. Run the container and get started!
+(once inside the container, keep all outputs in `~/container_outputs` to access them after exiting)
+```
 sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools:1
 ```
 
@@ -42,21 +45,24 @@ All AQuA tools are executable from anywhere inside the container. The container 
 Interested in getting your data to Tinker? Contact us at hello@axiotl.com
 
 ### Getting started:
-```
-# the container comes preloaded with publically available H3K27ac HiChIP samples. 
-# this can be viewed using-
-list_samples
 
-# all AQuA tools can be listed using-
+The container comes preloaded with publically available H3K27ac HiChIP samples. 
+This can be viewed using-
+```
+list_samples
+```
+
+All AQuA tools can be listed using-
+```
 list_tools
 ```
 
 ### Loop calling:
-```
-# we use extract_bedpe to call loops using a sample of interest. 
-# the tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
-# all outputs are printed in standard out in .bedpe format
 
+We use `extract_bedpe` to call loops using a sample of interest. 
+The tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
+All outputs are printed in standard out in `.bedpe` format
+```
 sample=K562_H3K27ac
 genome=hg38
 range=chr8:127000000:130000000      # <-- MYC locus
@@ -69,17 +75,17 @@ extract_bedpe \
 ```
 
 ### Visualization:
-```
-# seeing is believing!
-# we can easily visualize any locus of interest of a sample using plot_contacts, 
-# and overlay the called loops to assess our loop calls
 
+Seeing is believing!
+We can easily visualize any locus of interest of a sample using `plot_contacts`, 
+and overlay the called loops to assess our loop calls
+```
 plot_contacts \
  --sample1 $sample \
  --genome $genome \
  --range $range \
  --bedpe $output_dir/MYC.bedpe \
  --output_name $output_dir/MYC.pdf
-
-The .bedpe and .pdf files will now be available in your local machine in $working_dir
 ```
+
+The `.bedpe` and `.pdf` files will now be available in your local machine in `$working_dir`
