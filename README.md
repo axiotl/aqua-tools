@@ -14,105 +14,46 @@ For more information, please reach us at hello@axiotl.com.
 ## Installation and Dependencies
 
 
-### Juicer: 
+### Docker: 
 
-A working Java installation (version >= 1.8) on Windows, Linux, and Mac OSX is required. Quoting the Aiden lab-
->We recommend using the latest Java version available, but please do not use the Java Beta Version. Minimum system requirements for running Java can be found at https://java.com/en/download/help/sysreq.xml.
->To download and install the latest Java Runtime Environment (JRE), please go to https://www.java.com/download. 
+Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker is intalled on your machine. 
 
-
-1. Download Juicer Tools
-```
-cd
-wget https://s3.amazonaws.com/hicfiles.tc4ga.com/public/juicer/juicer_tools_1.19.02.jar
-```
-2. Edit terminal start script (.bashrc/.zshrc) and add the following line
-```
-export juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar'
-```
-3. Restart terminal
-
-
-### R: 
-
-Install the following R packages- 
-
-1. strawr
-2. parallel
-3. ggplot2
-4. gridExtra
-5. pheatmap
-
-
-### AQuA Tools:
-
-1. Download and unpack AQuA-Tools
-```
-cd
-wget https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip
-unzip main.zip
-mv aqua-tools-main aqua_tools
-cd aqua_tools
-chmod +x *
-```
-2. Edit terminal start script (.bashrc/.zshrc) and add the following line
-```
-export PATH="$HOME/aqua_tools:$PATH"
-```
-3. Restart terminal
-
-
-## Data and Organization
-
-We use `.hic` files as the only format of data source. In addition, we need a `.mergeStats.txt` file containing valid interaction read counts for human and mouse genome alignments. This is a modified version of a typical `.mergestat` file (an output of the [HiC-Pro](https://github.com/nservant/HiC-Pro) pipeline) that contains QC information for human and mouse PETs in one file. A `.mergeStats.txt` file should look like the following-
-
-|  | GM12878.hg38 | GM12878.mm10 |
-| ---------- | -------- | ------ |
-| valid_interaction       |  377103997    |  7165030  |
-| valid_interaction_rmdup       |  274352694   | 5205894 |
-| trans_interaction       |  80252048   |  708100   |
-| cis_interaction       |   194100646   |  4497794  |
-| cis-shortRange       |  170608942   |  3506516  |
-| cis_longRange       |  23491704   |  991278  |
-
-The two files above should be housed in a folder named after the sample, and should strictly be names as follows- 
+Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
 
 ```
-   + ~/SAMPLE
-       ++ SAMPLE.hic
-       ++ SAMPLE.mergeStats.txt
+# set up working station
+
+working_dir=$HOME/aqua_tools_container  # <-- change this path as per your convenience
+mkdir -p $working_dir
+cd $working_dir                         # <-- place the Dockerfile from GitHub in this directory
+
+
+# build the image (this can take upto 30 minutes)
+sudo docker build -t aqua_tools:1 .
+
+
+# run the container and get started!
+# once inside the container, please keep all outputs in 
+# ~/container_outputs to access them after exiting
+sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools:1
 ```
-If sample name is `GM12878`, the data structure should look like-
+
+
+## Recipes
+
+All AQuA tools can now be used inside the container. Here are some tutorials-
+
+### Getting started / Listing samples:
 ```
-   + ~/GM12878
-       ++ GM12878.hic
-       ++ GM12878.mergeStats.txt
+
 ```
 
-Please contact [Axiotl Inc.](https://axiotl.com) for any further questions.
-
-
-## Usage
-
-Once installed, all AQuA tools should be executable from anywhere and can be used by typing `-h` or `--help` followed by the name of the tool. For example-
+### Local loop calling:
 ```
-build_bedpe.sh -h 
 
+```
 
-Builds pairs between elements in two bed files.
-Pairs can be constrained by a third bed file (usually TADs)
-or by a minimum distance between them.
-Prints pairs in bedpe format to standard out.
-
-Pairs can be use to query .hic files with annotate_loops.sh
----------------
-OPTIONS
-
-   -A|--bed_A      PATH_TO_FIRST_BED_FILE    : Path of the first bed file you want to build the bedpe of
-   -B|--bed_B      PATH_TO_SECOND_BED_FILE   : Path of the second bed file you want to build the bedpe of
-  [-T|--TAD      ] PATH_TO_TAD_FILE          : Path of the TAD file that checks if genomic regions fall within them
-  [-d|--min_dist ] MIN_DROP_DISTANCE         : minimum distance between pairs used to drop results. Default 0 bp
-  [-D|--max_dist ] MAX_DROP_DISTANCE         : maximum distance between pairs used to drop results. Default 5 Mb
-  [-h|--help     ] Help message
+### Genome-wide loop calling:
+```
 
 ```

@@ -1474,7 +1474,7 @@ if(flag_inter == "FALSE"){
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
             bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/cpg_hg38.bed", sep = "" )
+            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
             draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
@@ -1747,7 +1747,7 @@ if(flag_inter == "FALSE"){
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
             bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/cpg_hg38.bed", sep = "" )
+            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
             draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
@@ -2245,7 +2245,7 @@ if(flag_inter == "FALSE"){
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
             bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/cpg_hg38.bed", sep = "" )
+            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
             draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
@@ -2663,7 +2663,7 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
           bed_enh <- paste(data_dir, "/", genome_build, "/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "")
-          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/cpg_hg38.bed", sep = "")
+          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/UCSC_CpG-islands_hg38.bed", sep = "")
 
         # Draw annotations for chromosome on the x-axis
             draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
@@ -3161,7 +3161,7 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
           bed_enh <- paste(data_dir, "/", genome_build, "/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "")
-          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/cpg_hg38.bed", sep = "")
+          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/UCSC_CpG-islands_hg38.bed", sep = "")
 
           # Draw annotations for chromosome on the x-axis
           draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
