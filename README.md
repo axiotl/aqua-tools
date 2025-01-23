@@ -8,8 +8,6 @@ The name 'AQuA' derives from **A**bsolute **QU**antification of chromatin **A**r
 
 >Gryder, B.E., Khan, J. & Stanton, B.Z. Measurement of differential chromatin interactions with absolute quantification of architecture (AQuA-HiChIP). Nat Protoc 15, 1209–1236 (2020). https://doi.org/10.1038/s41596-019-0285-9
 
-For more information, please reach us at hello@axiotl.com.
-
 
 ## Installation and Dependencies
 
@@ -21,31 +19,33 @@ Sample data and AQuA tools along with all their dependencies can be easily setup
 Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
 
 ```
-# set up working station
-
+## set up working station
 working_dir=$HOME/aqua_tools_container  # <-- change this path as per your convenience
 mkdir -p $working_dir
 cd $working_dir                         # <-- place the Dockerfile from GitHub in this directory
 
 
-# build the image (this can take upto 30 minutes)
+## build the image (this can take upto 30 minutes)
 sudo docker build -t aqua_tools:1 .
 
 
-# run the container and get started!
-# once inside the container, please keep all outputs in 
-# ~/container_outputs to access them after exiting
+## run the container and get started!
+# (once inside the container, consider keeping all outputs in ~/container_outputs to access them after exiting)
 sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools:1
 ```
 
 
 ## Recipes
 
-All AQuA tools can now be used inside the container. Here are some tutorials-
+All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses. 
 
-### Getting started / Listing samples:
+Interested in getting your data to Tinker? Contact us at hello@axiotl.com
+
+### Getting started:
 ```
-
+# the container comes preloaded with publically available H3K27ac HiChIP samples. 
+# this can be viewed using-
+list_samples
 ```
 
 ### Local loop calling:
