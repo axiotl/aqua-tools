@@ -63,6 +63,7 @@ We use `extract_bedpe` to call loops using a sample of interest.
 The tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
 All outputs are printed in standard out in `.bedpe` format
 ```
+# local loop calling 
 sample=K562_H3K27ac
 genome=hg38
 range=chr8:127000000:130000000      # <-- MYC locus
@@ -72,6 +73,14 @@ extract_bedpe \
  --sample1 $sample \
  --genome $genome \
  --range $range > $output_dir/MYC.bedpe
+
+# genome-wide loop calling
+TAD_file=/home/ubuntu/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
+
+extract_bedpe \
+ --sample1 $sample \
+ --genome $genome \
+ --TAD $TAD_file > $output_dir/K562_genome-wide-loops.bedpe
 ```
 
 ### Visualization:
