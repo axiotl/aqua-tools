@@ -46,14 +46,40 @@ Interested in getting your data to Tinker? Contact us at hello@axiotl.com
 # the container comes preloaded with publically available H3K27ac HiChIP samples. 
 # this can be viewed using-
 list_samples
+
+# all AQuA tools can be listed using-
+list_tools
 ```
 
-### Local loop calling:
+### Loop calling:
+```
+# we use extract_bedpe to call loops using a sample of interest. 
+# the tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
+# all outputs are printed in standard out in .bedpe format
+
+sample=K562_H3K27ac
+genome=hg38
+range=chr8:127000000:130000000      # <-- MYC locus
+output_dir=/home/ubuntu/container_outputs
+
+extract_bedpe \
+ --sample1 $sample \
+ --genome $genome \
+ --range $range > $output_dir/MYC.bedpe
 ```
 
+### Visualization:
 ```
+# seeing is believing!
+# we can easily visualize any locus of interest of a sample using plot_contacts, 
+# and overlay the called loops to assess our loop calls
 
-### Genome-wide loop calling:
-```
+plot_contacts \
+ --sample1 $sample \
+ --genome $genome \
+ --range $range \
+ --bedpe $output_dir/MYC.bedpe \
+ --output_name $output_dir/MYC.pdf
 
+The .bedpe and .pdf files will now be available in your local machine in $working_dir
 ```
