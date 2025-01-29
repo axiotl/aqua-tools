@@ -27,6 +27,21 @@ print_samples_for_genome() {
         if (system("[ -d \"" sample_dir "\" ]") == 0) {  # Check if sample directory exists
             has_samples = 1  # Set flag if samples exist
             versioned_sample = $1 "_version_" $5  # Construct versioned sample name
+            metadata_file = sample_dir "/" versioned_sample "/metadata.txt"
+            # Initialize metadata variables with default values
+            chip_target = "."
+            enzyme = "."
+            geo = "."
+
+            # Extract metadata if the file exists
+            if (system("[ -f \"" metadata_file "\" ]") == 0) {
+                while ((getline meta_line < metadata_file) > 0) {
+                    if (meta_line ~ /^ChIP_target:/) chip_target = substr(meta_line, index(meta_line, ":") + 2)
+                    if (meta_line ~ /^Enzyme:/) enzyme = substr(meta_line, index(meta_line, ":") + 2)
+                    if (meta_line ~ /^GEO:/) geo = substr(meta_line, index(meta_line, ":") + 2)
+                }
+                close(metadata_file)
+            }
             cmd = "bash get_stats.sh --genome " genome " --sample " versioned_sample # Call get_stats.sh
             while ((cmd | getline stats_output) > 0) {
                 if (stats_output !~ /^Sample Name/) {  # Skip header line
@@ -42,12 +57,12 @@ print_samples_for_genome() {
                         printf "|                              |\n"
                         printf "--------------------------------\n"
                         printf "\n"
-                        printf "%-30s|%-6s|%-9s|%-7s|%-7s|%-15s|%-15s|%-15s\n", "Sample Name", "AQuA", "Inherent", "Version", "Default", "valid_int_rmdup", "cis_short", "cis_long"
-                        printf "------------------------------+------+---------+-------+-------+---------------+---------------+---------------\n"
+                        printf "%-30s|%-6s|%-9s|%-20s|%-20s|%-20s|%-15s|%-9s|%-15s\n", "Sample Name", "AQuA", "Inherent", "Total interactions", "Interactions <20kb", "Interactions >=20kb", "ChIP_target", "Enzyme", "GEO"
+                        printf "------------------------------+------+---------+--------------------+--------------------+--------------------+---------------+---------+---------\n"
                         printed_header = 1
                     }
                     # Print sample details
-                    printf "%-30s|%-6s|%-9s|%-7s|%-7s|%-15s|%-15s|%-15s\n", $1, $3, $4, $5, default_val, valid_int_rmdup, cis_short, cis_long
+                    printf "%-30s|%-6s|%-9s|%-20s|%-20s|%-20s|%-15s|%-9s|%-15s\n", $1, $3, $4, valid_int_rmdup, cis_short, cis_long, chip_target, enzyme, geo
                 }
             }
             close(cmd)
