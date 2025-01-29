@@ -35,7 +35,6 @@ Args <- commandArgs(trailingOnly=T)
 ###########################################################################
 ###########################################################################
 
-## define arguments
 if( length(Args) == 14 ) {
 
   matrix_file   <- Args[1]
@@ -80,9 +79,6 @@ if( length(Args) == 14 ) {
   aqua_factor1 <- hg_total1 / mm_total1
 
 
-  # cat(sprintf("hg_total1      <- %f\n", hg_total1))
-  # cat(sprintf("mm_total1      <- %f\n", mm_total1))
-  # cat(sprintf("total1         <- %f\n", total1))
   cat(sprintf("norm_factor    <- %f\n", norm_factor1))
   cat(sprintf("aqua_factor    <- %f\n", aqua_factor1))
   
@@ -176,8 +172,7 @@ if( length(Args) == 14 ) {
   colnames( matrix_norm ) <- cols
 
   
-  ## actual plotting
-
+  ## plotting
   p1 <- pheatmap(  matrix_norm,
                    cluster_rows = FALSE, 
                    cluster_cols = FALSE, 
@@ -188,19 +183,17 @@ if( length(Args) == 14 ) {
                    show_rownames = FALSE    
                 )
 
-  #grid.arrange(arrangeGrob(p1[[4]], nrow=1,top = paste(prefix, ": ", sample1,sep="")))
   g <- arrangeGrob( p1[[4]], 
                     nrow = 1,
                     top = paste( sample1, " (n.loop=", nrow(pairs), ")", sep = "" ) 
                   )
-  #ggsave(file=out_file, g, width = 4.5, height = 4.5) #saves g
 
     ggsave( file = out_file, 
           g, 
           width = 4.5, 
           height = 4.5, 
           device = "pdf"
-        ) #saves g
+        ) 
   
   ## PATCH: https://github.com/tidyverse/ggplot2/issues/2787
   file.exists("Rplots.pdf")
@@ -259,7 +252,6 @@ if( length(Args) == 14 ) {
 ###########################################################################
 ###########################################################################
 
-## define arguments
 
 if(length(Args) == 17) {
 
@@ -424,7 +416,7 @@ if(length(Args) == 17) {
   colnames(matrix_normA) <- cols ; colnames(matrix_normB) <- cols ; colnames(delta) <- cols
 
 
-  ## actual plotting
+  ## plotting
   p1 <- pheatmap(  matrix_normA, 
                    cluster_rows = FALSE, 
                    cluster_cols = FALSE, 
@@ -455,7 +447,6 @@ if(length(Args) == 17) {
                   show_rownames = FALSE 
                 )
 
-  #grid.arrange(arrangeGrob(p1[[4]],p2[[4]],p3[[4]],nrow=1,top = paste(prefix, ": ",sample1,", ",sample2,", and delta",sep="")))
   g <- arrangeGrob( p1[[4]], p2[[4]], p3[[4]],
                     nrow = 1,
                     top = paste(sampleA, ", ", sampleB, ", and delta", " (n.loop=", nrow(pairs), ")", sep = "" )
@@ -466,7 +457,7 @@ if(length(Args) == 17) {
           width = 14, 
           height = 4.5, 
           device = "pdf"
-        ) #saves g
+        )
   
   ## PATCH: https://github.com/tidyverse/ggplot2/issues/2787
   file.exists("Rplots.pdf")
@@ -516,4 +507,3 @@ if(length(Args) == 17) {
   cat("\nOutput folder created at", full_path, "\n\n")  
 
 }
-
