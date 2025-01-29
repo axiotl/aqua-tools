@@ -9,7 +9,7 @@ function no_sigint {
 
     let ctrlc_count++
     if [[ $ctrlc_count == 1 ]]; then
-        sudo rm -rf $temp_dir
+        rm -rf $temp_dir
     else
         :
     fi
@@ -32,13 +32,13 @@ function help {
     echo "----------------------------------"
     echo "OPTIONS"
     echo
-    echo "   -A|--bed_A            : Path of the first bed file you want to use"
-    echo "   -P|--bedpe            : Path of the bedpe file you want to use"
-    echo "  [-B|--bed_B         ]  : Path of the second bed file you want to use"
-    echo "  [-f|--flank         ]  : Genome distance in bp that the bed should be in vicinity of either foot. Default is 0"
-    echo "  [-v|--absence       ]  : If TRUE, reports those rows of the bedpe that do not intersect with rows of given bed file. Default FALSE"
-    echo "  [   --print_bed     ]   : If TRUE, reports intersecting rows of bed instead of bedpe. Default FALSE"
-    echo "  [   --print_bool    ]   : If TRUE, retains all rows of bedpe and prints TRUE/FALSE in new columns to indicate intersections on bedpe feet. Default FALSE"
+    echo "   -A|--bed_A            : Path of the first bed file"
+    echo "   -P|--bedpe            : Path of the bedpe file"
+    echo "  [-B|--bed_B         ]  : Path of the second bed file"
+    echo "  [-f|--flank         ]  : Genome distance in bp that the bed should be in vicinity of either foot. Default = 0"
+    echo "  [-v|--absence       ]  : If TRUE, reports rows of the bedpe that do not intersect with rows of the bed file. Default FALSE"
+    echo "  [   --print_bed     ]  : If TRUE, reports intersecting rows of bed instead of bedpe. Default FALSE"
+    echo "  [   --print_bool    ]  : If TRUE, keeps all bedpe rows and adds columns marking intersections and absences. Default FALSE"
     echo "  [-h|--help          ]     Help message"
     echo
     echo
