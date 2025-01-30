@@ -153,6 +153,12 @@ BEGIN {
     OFS="\t"
 }
 {
+    # Check for tab separator
+    if ($0 !~ /\t/) {
+        print "The BEDPE file does not contain tab-separated values on line " NR | "cat 1>&2";
+        exit 1;
+    }
+
     # Remove carriage return (\r) from all fields if present
     for (i=1; i<=NF; i++) gsub(/\r$/, "", $i);
 
@@ -184,6 +190,7 @@ BEGIN {
     # Print the first 6 columns with the line number appended
     print $1, $2, $3, $4, $5, $6, NR > "'"$temp_dir/annotated.bedpe"'"
 }' "$P"
+
 
 # Capture the exit status of awk
 awk_status=$?
