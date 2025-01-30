@@ -12,7 +12,6 @@ args           <- commandArgs( trailingOnly = TRUE )
 
 
 
-
 # Internal function to find BEDPE format
 .findBedpeFormat <- function(df) {
   df_cols <- colnames(df)[seq(1, 10)]
@@ -92,6 +91,10 @@ union_bedpe <- function(bedpe1,bedpe2){
   
   # perform intersection
   overlaps <- as.data.frame(findOverlaps(gi1, gi2, type = "any", ignore.strand = TRUE))
+  if (nrow(overlaps) == 0) {
+    cat("No overlaps found between BEDPE files.")
+    stop()
+  }
   
   
   # It's better now to handle the two kinds of intersections separately:
@@ -253,5 +256,7 @@ union <- union_bedpe(
 for( i in 1:nrow(union) ){ 
   try(cat( paste( union[i,], collapse = "\t"), "\n", sep = "" ), silent=TRUE) 
 }
+
+
 
 
