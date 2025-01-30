@@ -12,7 +12,7 @@ function no_sigint {
 
     let ctrlc_count++
     if [[ $ctrlc_count == 1 ]]; then
-        sudo rm -rf $temp_dir
+        rm -rf $temp_dir
     else
         :
     fi
@@ -36,7 +36,7 @@ function help {
     echo "OPTIONS"
     echo
     echo "   -P|--bedpe        : Path of the bedpe file you want to use"
-    echo "  [-F|--flank     ]  : Genome distance in bp to increase the size of bedpe rows. Default is 0"
+    echo "  [-f|--flank     ]  : Genome distance in bp to increase bedpe pairs. Default = 0"
     echo "  [-h|--help      ]    Help message"
     exit;
 }
@@ -53,18 +53,18 @@ for arg in "$@"; do
   shift
   case "$arg" in
       "--bedpe")     set -- "$@" "-P" ;;
-      "--flank")     set -- "$@" "-F" ;;
+      "--flank")     set -- "$@" "-f" ;;
       "--help")      set -- "$@" "-h" ;;
        *)            set -- "$@" "$arg"
   esac
 done
 
-F=0
-while getopts ":P:F:h" OPT
+f=0
+while getopts ":P:f:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
-  F) F=$OPTARG;;
+  F) f=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -82,9 +82,4 @@ done
 
 
 
-Rscript $aqua_dir/cluster_bedpe.r $P $F $temp_dir
-
-
-
-
-trap "sudo rm -rf $temp_dir" EXIT
+Rscript $aqua_dir/cluster_bedpe.r $P $f $temp_dir
