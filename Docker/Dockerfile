@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Update Ubuntu packages
 RUN apt update && apt install -y \
+    openjdk-8-jdk \
+    openjdk-8-jre \
     software-properties-common \
     libcurl4-openssl-dev \
     libxml2-dev \
