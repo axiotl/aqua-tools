@@ -35,8 +35,8 @@ function help {
     echo "   -A|--bed_A            : Path of the first bed file"
     echo "   -P|--bedpe            : Path of the bedpe file"
     echo "  [-B|--bed_B         ]  : Path of the second bed file"
-    echo "  [-f|--flank         ]  : Genome distance in bp that the bed should be in vicinity of either foot. Default = 0"
-    echo "  [-v|--absence       ]  : If TRUE, reports rows of the bedpe that do not intersect with rows of the bed file. Default FALSE"
+    echo "  [-f|--flank         ]  : Genome distance (bp) the BED should be near either foot. Default is 0"
+    echo "  [-v|--absence       ]  : If TRUE, reports bedpe rows that do not intersect bed rows. Default FALSE"
     echo "  [   --print_bed     ]  : If TRUE, reports intersecting rows of bed instead of bedpe. Default FALSE"
     echo "  [   --print_bool    ]  : If TRUE, keeps all bedpe rows and adds columns marking intersections and absences. Default FALSE"
     echo "  [-h|--help          ]     Help message"
@@ -153,10 +153,13 @@ BEGIN {
     OFS="\t"
 }
 {
+    # Remove carriage return (\r) from all fields if present
+    for (i=1; i<=NF; i++) gsub(/\r$/, "", $i);
+
     # Validate the format of the BEDPE file
     if (NR == 1) {
         if (!($1 ~ /^chr/ && $4 ~ /^chr/ && $2+0 == $2 && $3+0 == $3 && $5+0 == $5 && $6+0 == $6)) {
-            print "The BEDPE file does not have the expected format in line " NR ". Expected chr1, start1, end1, chr2, start2, end2." | "cat 1>&2";
+            print "The BEDPE file does not have the expected format in line " NR ". Expected chr1 start1 end1 chr2 start2 end2" | "cat 1>&2";
             exit 1;
         }
     }
