@@ -1473,15 +1473,11 @@ if(flag_inter == "FALSE"){
             cat( "\nDrawing default annotations\n" )
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
-            draw_bed( bed_cpg , "#008949",   1, FALSE )
             
-            legend(-2, 125, legend=c("transcription start sites", "ENCODE 3 cCRE enhancers", "CpG sites"), 
-                   col = c("#ef0000", "#ffd700", "#008949"), lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+            legend(-2, 125, legend="transcription start sites", 
+                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
           }
           
         } else {
@@ -1746,15 +1742,11 @@ if(flag_inter == "FALSE"){
             cat( "\nDrawing default annotations\n" )
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
-            draw_bed( bed_cpg , "#008949",   1, FALSE )
             
-            legend(-2, 125, legend=c("transcription start sites", "ENCODE 3 cCRE enhancers", "CpG sites"), 
-                   col = c("#ef0000", "#ffd700", "#008949"), lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+            legend(-2, 125, legend="transcription start sites", 
+                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
           }
           
         } else {
@@ -2244,15 +2236,11 @@ if(flag_inter == "FALSE"){
             cat( "\nDrawing default annotations\n" )
             
             bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            bed_enh <- paste( data_dir,"/",genome_build,"/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "" )
-            bed_cpg <- paste( data_dir,"/",genome_build,"/reference/UCSC_CpG-islands_hg38.bed", sep = "" )
             
             draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            draw_bed( bed_enh , "#ffd700", 0.7, FALSE )
-            draw_bed( bed_cpg , "#008949",   1, FALSE )
             
-            legend(-2, 125, legend=c("transcription start sites", "ENCODE 3 cCRE enhancers", "CpG sites"), 
-                   col = c("#ef0000", "#ffd700", "#008949"), lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+            legend(-2, 125, legend="transcription start sites", 
+                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
           }
           
         } else {
@@ -2662,18 +2650,13 @@ if(flag_inter == "TRUE"){
         if(genome_build == "hg38") {
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-          bed_enh <- paste(data_dir, "/", genome_build, "/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "")
-          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/UCSC_CpG-islands_hg38.bed", sep = "")
 
         # Draw annotations for chromosome on the x-axis
             draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-            draw_bed_inter(bed_enh, "#ffd700", -0.2, FALSE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-            draw_bed_inter(bed_cpg, "#008949", -0.3, FALSE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-
+            
             # Draw annotations for chromosome on the y-axis
             draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-            draw_bed_inter(bed_enh, "#ffd700", -0.2, FALSE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-            draw_bed_inter(bed_cpg, "#008949", -0.3, FALSE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+
         }
       }
       
@@ -3160,18 +3143,12 @@ if(flag_inter == "TRUE"){
         if(genome_build == "hg38") {
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-          bed_enh <- paste(data_dir, "/", genome_build, "/reference/ENCODE3_cCRE-enhancers_hg38.bed", sep = "")
-          bed_cpg <- paste(data_dir, "/", genome_build, "/reference/UCSC_CpG-islands_hg38.bed", sep = "")
 
           # Draw annotations for chromosome on the x-axis
           draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-          draw_bed_inter(bed_enh, "#ffd700", -0.2, FALSE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-          draw_bed_inter(bed_cpg, "#008949", -0.3, FALSE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
           
           # Draw annotations for chromosome on the y-axis
           draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-          draw_bed_inter(bed_enh, "#ffd700", -0.2, FALSE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-          draw_bed_inter(bed_cpg, "#008949", -0.3, FALSE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
         }
       }
       
