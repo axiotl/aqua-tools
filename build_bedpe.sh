@@ -11,7 +11,7 @@ function no_sigint {
 
     let ctrlc_count++
     if [[ $ctrlc_count == 1 ]]; then
-        sudo rm -rf $temp_dir
+        rm -rf $temp_dir
     else
         :
     fi
@@ -64,7 +64,7 @@ function help {
     echo "  [-T|--TAD          ] : Path to the TAD file (to restrict pairings outside of the TAD)"
     echo "  [-d|--min_dist     ] : Minimum distance between pairs used to drop results. Default 0 bp"
     echo "  [-D|--max_dist     ] : Maximum distance between pairs used to drop results. Default 5 Mb"
-    echo "  [-i|--get_trans    ] : If pairs between different chromosomes should be made. If TRUE, will print trans pairs only. Default FALSE"
+    echo "  [-t|--get_trans    ] : If TRUE, prints trans pairs only. Default = FALSE"
     echo "  [-h|--help         ]   Help message"
     exit;
 }
@@ -85,7 +85,7 @@ for arg in "$@"; do
       "--TAD")             set -- "$@" "-T" ;;
       "--min_dist")        set -- "$@" "-d" ;;
       "--max_dist")        set -- "$@" "-D" ;;
-      "--get_trans")       set -- "$@" "-i" ;;
+      "--get_trans")       set -- "$@" "-t" ;;
       "--help")            set -- "$@" "-h" ;;
        *)                  set -- "$@" "$arg"
   esac
@@ -96,9 +96,9 @@ done
 T="NULL"
 d=0
 D=5000000
-i="FALSE"
+t="FALSE"
 
-while getopts ":A:B:T:d:D:i:h" OPT
+while getopts ":A:B:T:d:D:t:h" OPT
 do
     case $OPT in
   A) A=$OPTARG;;
@@ -106,7 +106,7 @@ do
   T) T=$OPTARG;;
   d) d=$OPTARG;;
   D) D=$OPTARG;;
-  i) i=$OPTARG;;
+  t) t=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -127,8 +127,8 @@ if [[ "$d" -lt 0 ]]; then
     exit 1
 fi
 
-if [[ "$i" != "TRUE" && "$i" != "FALSE" ]]; then 
-    echo "get_trans can either be TRUE or FALSE"
+if [[ "$t" != "TRUE" && "$t" != "FALSE" ]]; then 
+    echo "--get_trans can either be TRUE or FALSE"
     exit 1
 fi
 
@@ -136,7 +136,7 @@ fi
 
 
 
-if [[ $i == "FALSE" ]]; then
+if [[ $t == "FALSE" ]]; then
    if [[ $T == "NULL" ]]; then
 
        awk -v D="$D" -v d="$d" '
@@ -291,7 +291,7 @@ fi
 
 
 
-if [[ $i == "TRUE" ]]; then
+if [[ $t == "TRUE" ]]; then
     
     
     num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
@@ -329,4 +329,4 @@ if [[ $i == "TRUE" ]]; then
 
 fi
 
-trap "sudo rm -rf $temp_dir" EXIT
+trap "rm -rf $temp_dir" EXIT
