@@ -2,13 +2,8 @@
 
 data_dir=$HOME/lab-data
 aqua_dir=$HOME/aqua_tools
-ram_disk=/media/ram_disk
 
-sample_sheet="$HOME/sample_sheet.txt"
-
-
-flag_ram_disk="doesnt_exist"
-
+sample_sheet="$HOME/setup/sample_sheet.txt"
 
 ctrlc_cont=0
 
@@ -16,14 +11,7 @@ function no_sigint {
 
     let ctrlc_count++
     if [[ $ctrlc_count == 1 ]]; then
-#       echo "Aborting process"
-        if [ -d "$ram_disk" ]; then
-        sudo umount "$ram_disk"
-        cd /media
-        sudo rm -r "$ram_disk"
-        else
-        :
-        fi
+        exit 1
     fi
 
 }
@@ -32,14 +20,10 @@ trap no_sigint EXIT
 
 function usage {
     echo -e "usage: "
-    echo -e "  annotate_loops.sh \\"
+    echo -e "  query_bedpe.sh \\"
     echo -e "    -G GENOME_BUILD \\"
     echo -e "    -P PATH_TO_BEDPE_YOU_WANT_TO_ANNOTATE \\"
     echo -e "    -A NAME_OF_FIRST_SAMPLE \\"
-    echo -e "   [-Q USE_AQUA_FACTORS] \\"
-    echo -e "   [-B NAME_OF_SECOND_SAMPLE] \\"
-    echo -e "   [-R RESOLUTION] \\"
-    echo -e "   [-I INHERENT] \\"
     echo -e "   [-h]"
     echo -e "Use option -h|--help for more information"
 }
@@ -52,20 +36,17 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "    -P|--pair            : Full path to the bedpe (pairs) file you want to annotate, without headers! "
+    echo "    -P|--bedpe           : Full path to the bedpe file you want to annotate, without headers! "
     echo "    -A|--sample1         : Name of the sample"
-    echo "    -G|--genome          : The genome build the sample(s) has been processed using. Strictly hg19 or hg38"
+    echo "    -G|--genome          : The genome build the sample(s) has been processed using. Strictly hg19, hg38, or mm10"
     echo "  [ -Q|--norm          ] : Which normalization to use. Strictly 'none', 'cpm', 'aqua', or 'abc' in lower case. Non-spike-in samples default to cpm. Spike-in samples default to aqua. "
-    echo "  [ -B|--sample2       ] : The name of the second sample. If triggered, calculates the delta contact values for that pair. Useful in case vs control"
+    echo "  [ -B|--sample2       ] : For two sample delta contacts, name of the second sample"
     echo "  [ -R|--resolution    ] : Resolution of sample in basepairs, using which the contact values should be calculated. Default 5000. Accepted resolutions- 1000,5000,10000,25000,50000,100000,250000,500000,1000000,2500000"
     echo "  [ -f|--formula       ] : Arithmetic to use to report contact calues. Options- center, max, average, sum. Default = center"
     echo "  [ -F|--fix           ] : If FALSE, reports new coordinates based on arithmetic center or max. Default = TRUE"
-    echo "  [    --shrink_wrap   ] : Squeezes a 2D bedpe interval until supplied value is reached. Default = FALSE"
-    echo "  [    --split         ] : Splits a 2D bedpe interval into multiple sub-intervals greater than supplied value. Default = FALSE"
-    echo "  [    --padding       ] : Joins sub-intervals in 2D space reported by --split, based on supplied value in bin units. Default = 2"
-    echo "  [    --expand        ] : Expands 1D bedpe feet in both directions based on supplied value(in bin units). Default = 0"
-    echo "  [ -I|--inherent      ] : If TRUE, hic values transformed to inherent units. Default = FALSE"
-    echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default = FALSE"
+    echo "  [    --expand        ] : Expands 1D bedpe feet in both directions based on supplied value (in bin units). Default = 0"
+    echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default = FALSE"
+    echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default = TRUE"
     echo "  [ -h|--help          ] : Help message. Primer can be found at https://rb.gy/zyfjxc"
     exit;
 }
@@ -80,7 +61,7 @@ fi
 for arg in "$@"; do
   shift
   case "$arg" in
-      "--pair")          set -- "$@" "-P" ;;
+      "--bedpe")         set -- "$@" "-P" ;;
       "--sample1")       set -- "$@" "-A" ;;
       "--genome")        set -- "$@" "-G" ;;
       "--norm")          set -- "$@" "-Q" ;;
@@ -92,7 +73,7 @@ for arg in "$@"; do
       "--shrink_wrap")   set -- "$@" "-s" ;;
       "--padding")       set -- "$@" "-p" ;;
       "--expand")        set -- "$@" "-e" ;; 
-      "--inherent")      set -- "$@" "-I" ;;
+      "--inherent")      set -- "$@" "-i" ;;
       "--preserve_meta") set -- "$@" "-m" ;;
       "--help")          set -- "$@" "-h" ;;
        *)                set -- "$@" "$arg"
@@ -108,8 +89,8 @@ S=FALSE
 s=FALSE
 p=2
 e=0
-I=FALSE
-m=FALSE
+i=FALSE
+m=TRUE
 
 while getopts ":P:A:G:Q:B:R:f:F:S:s:p:e:I:m:h" OPT
 do
@@ -205,14 +186,15 @@ fi
 # Do all necessary parameter checks
 #----------------------------------
 
-if [[ -z $P ]];
-then
+if [[ -z $P || ! -f $P ]]; then
+    echo "Invalid file specified in '$P'"
     usage
-    exit
+    exit 1
 fi
 
 
-if [[ "$I" == "TRUE" && ( "$Q" != "blank" && "$Q" != "none" ) ]];
+
+if [[ "$i" == "TRUE" && ( "$Q" != "blank" && "$Q" != "none" ) ]];
 then
     echo -e "\n\n--inherent is not compatible with aqua, cpm, or abc normalization. Choose either --norm $Q or --inherent TRUE\n"
     exit 1
@@ -238,21 +220,6 @@ fi
 num_loops=`cat "$P" | wc -l`
 
 
-# RAM-disk update
-
-#if [ "$num_loops" -ge 10000 ]; then
-#
-#   flag_ram_disk="exists"
-#
-#   # RAM-disk creation/update
-#    if [ ! -d "$ram_disk" ]; then
-#        # echo "Proceeding with RAM_disk creation for annotate_loops"
-#
-#        sudo mkdir -p "$ram_disk"
-#        buffer=100000000
-#    fi
-#fi
-
 ###########################################################################
 ###########################################################################
 ###                                                                     ###
@@ -263,36 +230,6 @@ num_loops=`cat "$P" | wc -l`
 
 if [ -z "$B" ]
 then
-    if [ $flag_ram_disk == "exists" ]; then
-
-        size_file=`du -b "$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic" | cut -f 1`
-        size_disk=`echo "$size_file+$buffer" | bc`
-
-        sudo mount -t tmpfs -o size="$size_disk" tmpfs "$ram_disk"
-
-        # echo "RAM disk successfully created and mounted"
-
-        sudo cp "$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic" /media/ram_disk
-
-        # echo ".hic copied to RAM disk"
-
-        Rscript \
-        $aqua_dir/annotate_loops.r \
-         $P \
-         $R \
-         $ram_disk/${version_dir_A}.allValidPairs.hic \
-         $data_dir/$G/$A/mergeStats.txt \
-         $Q \
-         $G \
-         $num_loops \
-         $f $F $S $s $p $e $I $data_dir/$G/$A $m
-    
-    fi
-
-    if [ $flag_ram_disk == "doesnt_exist" ]; then
- 
-        # echo "Not using RAM disk"
-
         Rscript \
         $aqua_dir/annotate_loops.r \
           $P \
@@ -302,9 +239,7 @@ then
           $Q \
           $G \
           $num_loops \
-          $f $F $S $s $p $e $I $data_dir/$G/$A $m
-
-    fi
+          $f $F $S $s $p $e $i $data_dir/$G/$A $m
 fi
 
 ###########################################################################
@@ -329,38 +264,6 @@ then
             exit 1
         fi
 
-
-    if [ $flag_ram_disk == "exists" ]; then
-
-        size_file1=`du -b "$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic" | cut -f 1`
-        size_file2=`du -b "$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic" | cut -f 1`
-        size_disk=`echo "$size_file1+$size_file2+$buffer" | bc`
-
-        sudo mount -t tmpfs -o size="$size_disk" tmpfs "$ram_disk"
-
-        # echo "RAM disk successfully created and mounted"
-
-        sudo cp "$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic" /media/ram_disk
-        sudo cp "$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic" /media/ram_disk
-
-        # echo ".hics copied to RAM disk"
-
-
-        Rscript \
-        $aqua_dir/annotate_loops.r \
-          $P \
-          $R \
-          $ram_disk/${version_dir_A}.allValidPairs.hic \
-          $data_dir/$G/$A/mergeStats.txt \
-          $ram_disk/${version_dir_B}.allValidPairs.hic \
-          $data_dir/$G/$B/mergeStats.txt \
-          $Q \
-          $G \
-          $num_loops \
-          $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $I
-    fi
-
-    if [ $flag_ram_disk == "doesnt_exist" ]; then
  
         Rscript \
         $aqua_dir/annotate_loops.r \
@@ -373,7 +276,6 @@ then
           $Q \
           $G \
           $num_loops \
-          $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $I
-    fi
+          $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $i
     
 fi
