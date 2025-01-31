@@ -25,15 +25,15 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "   -A|--sample1        : Name of sample"
-    echo "   -G|--genome         : Genome build the sample was processed using"
+    echo "   -A|--sample1        : Name of the sample as it appears on the Tinkerbox"
+    echo "   -G|--genome         : Genome build used for sample processing"
     echo "   -R|--range          : Range to obtain clusters from, in chr:start:end format"
-    echo "  [-r|--resolution   ] : Resolution in base pairs. Only 5000 and 1000 supported. Default 5000."
+    echo "  [-r|--resolution   ] : Resolution in base pairs. Only 5000 and 1000 supported. Default 5000"
     echo "  [-T|--TAD          ] : Full path to TAD file, the boundaries of which will be used to obtain clusters"
-    echo "  [-S|--score        ] : Inherent score to seed cluster formation. Default = 0.7"
-    echo "  [-m|--mode         ] : Shape of bedpe to be called. Strictly loop, flare, or glob. Default glob"
-    echo "  [   --radius       ] : Bin distance units to search for neighbours . Default = 1"
-    echo "  [   --min_dist     ] : Distance in basepairs to filter out extracted elements . Default = 0"
+    echo "  [-S|--score        ] : Inherent score to seed cluster formation. Default 0.7"
+    echo "  [-m|--mode         ] : Shape of bedpe to be called: loop, flare, or glob. Default glob"
+    echo "  [   --radius       ] : Bin distance units to search for neighbours. Default 1"
+    echo "  [   --min_dist     ] : Distance in basepairs to filter out extracted elements. Default 0"
     echo "  [-h|--help         ]   Help message"
     exit;
 }
