@@ -42,15 +42,15 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "   -A|--sample1        : Name of sample"
-    echo "   -G|--genome         : Genome build the sample was processed using"
+    echo "   -A|--sample1        : Name of the sample as it appears on the Tinkerbox"
+    echo "   -G|--genome         : Genome build used for sample processing"
     echo "  [-O|--output_dir    ]: Optional: provide a path for the final clusters file"
-    echo "  [-S|--score         ]: Inherent score to seed cluster formation. Default = 0.7"
-    echo "  [-r|--resolution    ]: Resolution in base pairs. Only 5000 and 1000 supported. Default 5000."
-    echo "  [   --radius        ]: Bin distance units to search for neighbours. Default = 1"
-    echo "  [   --min_dist      ]: Distance in basepairs to filter out extracted elements. Default = 0"
-    echo "  [   --window_size   ]: Size of sliding window in base pairs. Default = 3000000"
-    echo "  [   --overlap_size  ]: Size of overlap between two consecutive windows in base pairs. Default = 1200000"
+    echo "  [-S|--score         ]: Inherent score to seed cluster formation. Default 0.7"
+    echo "  [-r|--resolution    ]: Resolution in base pairs. Only 5000 and 1000 supported. Default 5000"
+    echo "  [   --radius        ]: Bin distance units to search for neighbours. Default 1"
+    echo "  [   --min_dist      ]: Distance in basepairs to filter out extracted elements. Default 0"
+    echo "  [   --window_size   ]: Size of sliding window in base pairs. Default 3000000"
+    echo "  [   --overlap_size  ]: Size of overlap between two consecutive windows in base pairs. Default 1200000"
     echo "  [-h|--help          ]  Help message"
     exit;
 }
