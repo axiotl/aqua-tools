@@ -35,7 +35,7 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "   -P|--bedpe        : Path of the bedpe file you want to use"
+    echo "   -P|--bedpe        : Bedpe file path"
     echo "  [-f|--flank     ]  : Genome distance in bp to increase bedpe pairs. Default = 0"
     echo "  [-h|--help      ]    Help message"
     exit;
