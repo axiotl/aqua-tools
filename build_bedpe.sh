@@ -64,7 +64,7 @@ function help {
     echo "  [-T|--TAD          ] : Path to the TAD file (to restrict pairings outside of the TAD)"
     echo "  [-d|--min_dist     ] : Minimum distance between pairs used to drop results. Default 0 bp"
     echo "  [-D|--max_dist     ] : Maximum distance between pairs used to drop results. Default 5 Mb"
-    echo "  [-t|--get_trans    ] : If TRUE, prints trans pairs only. Default = FALSE"
+    echo "  [-t|--get_trans    ] : If TRUE, prints trans pairs only. Default FALSE"
     echo "  [-h|--help         ]   Help message"
     exit;
 }
