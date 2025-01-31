@@ -25,21 +25,21 @@ function usage {
 
 function help {
     echo 
-    echo "Given a bedpe file, prints those rows of the bedpe in standard out that intersect with rows of given bed file(s) on either foot of the pair"
+    echo "Prints bedpe rows in standard out that intersect with rows of given bed file(s) on either foot of the pair"
     echo
     echo "Useful in extracting biological subsets from the bedpe"
     echo
     echo "----------------------------------"
     echo "OPTIONS"
     echo
-    echo "   -A|--bed_A            : Path of the first bed file"
-    echo "   -P|--bedpe            : Path of the bedpe file"
-    echo "  [-B|--bed_B         ]  : Path of the second bed file"
-    echo "  [-f|--flank         ]  : Genome distance (bp) the BED should be near either foot. Default is 0"
+    echo "   -A|--bed_A            : Bed file path"
+    echo "   -P|--bedpe            : Bedpe file path"
+    echo "  [-B|--bed_B         ]  : Optional second bed file path"
+    echo "  [-f|--flank         ]  : Genome distance (bp) the BED should be near either foot. Default 0"
     echo "  [-v|--absence       ]  : If TRUE, reports bedpe rows that do not intersect bed rows. Default FALSE"
     echo "  [   --print_bed     ]  : If TRUE, reports intersecting rows of bed instead of bedpe. Default FALSE"
-    echo "  [   --print_bool    ]  : If TRUE, keeps all bedpe rows and adds columns marking intersections and absences. Default FALSE"
-    echo "  [-h|--help          ]     Help message"
+    echo "  [   --print_bool    ]  : If TRUE, prints all bedpe rows with intersections and absences. Default FALSE"
+    echo "  [-h|--help          ]    Help message"
     echo
     echo
     echo "----------------------------------"
