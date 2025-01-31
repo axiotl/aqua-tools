@@ -47,7 +47,7 @@ function help {
     echo "  [    --expand        ] : Expands 1D bedpe feet in both directions by given bin value. Default 0"
     echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default FALSE"
     echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default TRUE"
-    echo "  [ -h|--help          ] : Help message. Primer can be found at https://rb.gy/zyfjxc"
+    echo "  [ -h|--help          ] : Help message"
     exit;
 }
 
