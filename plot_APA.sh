@@ -26,17 +26,17 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "    -P|--pair                   : Path to the bedpe (pairs) file, without headers"
-    echo "    -A|--sample1                : Name of sample you want to use to create the plot"
-    echo "    -G|--genome                 : The genome build the sample(s) has been processed using. Strictly hg19, hg38, or mm10"
+    echo "    -P|--bedpe                  : Path to the bedpe file, without headers"
+    echo "    -A|--sample1                : Name of the sample as it appears on the Tinkerbox"
+    echo "    -G|--genome                 : Genome build used for sample processing"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
-    echo " [  -B|--sample2             ]  : The name of the second sample. If triggered, plots the delta AQuA normalized values from both samples for that pair. Useful in case vs control"
-    echo " [  -Q|--norm                ]  : Which normalization to use. Strictly 'cpm', 'aqua', or 'none'  in lower case. Non-spike-in samples default to cpm. Spike-in samples default to aqua."
-    echo " [     --bin_size            ]  : Bin size you want to use for the APA plots. If not specified, default 5000 will be used"
-    echo " [     --max_cap             ]  : Upper limit of the plot range. If not specified, upper limit will be calculated using max bin value"
-    echo " [     --min_cap             ]  : Lower limit of the plot range. If not specified, lower limit is 0"
-    echo " [     --max_cap_delta       ]  : Upper limit of the delta plot range. If not specified, upper limit will be calculated using max bin value. For two-sample analyses only."
-    echo " [     --loop_norm           ]  : If TRUE, APA values are normalized by the number of loops in the bedpe file. Default FALSE"
+    echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample"
+    echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, aqua, or abc in lower case"
+    echo " [  -r|--resolution          ]  : Bin size you want to use for the APA plots. Default 5000"
+    echo " [     --max_cap             ]  : Upper limit of the plot range. Defaults to max bin value"
+    echo " [     --min_cap             ]  : Lower limit of the plot range. Default 0"
+    echo " [     --max_cap_delta       ]  : Upper limit of delta plot range. Defaults to max bin value"
+    echo " [     --loop_norm           ]  : If TRUE, normalizes APA values by loop count in bedpe. Default FALSE"
     echo " [  -h|--help                ]   Help message"
     exit;
 }
@@ -52,13 +52,13 @@ fi
 for arg in "$@"; do
   shift
   case "$arg" in
-      "--pair")                 set -- "$@" "-P" ;;
+      "--bedpe")                set -- "$@" "-P" ;;
       "--sample1")              set -- "$@" "-A" ;;
       "--genome")               set -- "$@" "-G" ;;
       "--out-dir")              set -- "$@" "-O" ;;
       "--sample2")              set -- "$@" "-B" ;;
       "--norm")                 set -- "$@" "-Q" ;;
-      "--bin_size")             set -- "$@" "-b" ;;
+      "--resolution")           set -- "$@" "-r" ;;
       "--max_cap")              set -- "$@" "-c" ;;
       "--min_cap")              set -- "$@" "-e" ;;
       "--max_cap_delta")        set -- "$@" "-d" ;;
@@ -68,13 +68,13 @@ for arg in "$@"; do
   esac
 done
 
-b=5000
+r=5000
 c="no_cap"
 d="no_cap"
 e="no_cap"
 l=FALSE
 
-while getopts ":P:A:G:O:B:Q:b:c:e:d:f:l:h" OPT
+while getopts ":P:A:G:O:B:Q:r:c:e:d:f:l:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -82,7 +82,7 @@ do
   G) G=$OPTARG;;
   B) B=$OPTARG;;
   O) O=$OPTARG;;
-  b) b=$OPTARG;;
+  r) r=$OPTARG;;
   c) c=$OPTARG;;
   Q) Q=$OPTARG;;
   l) l=$OPTARG;;
@@ -269,19 +269,19 @@ if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
 # Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
 echo -e "\nBeginning APA...\n"
-$juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
+$juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
 
 # Copying the generated APA.txt to APA_raw.txt
-out_mat=$out_dir/$b/gw/APA.txt
+out_mat=$out_dir/$r/gw/APA.txt
 mv "$out_mat" "$out_dir"/APA_raw.txt
 
 
 awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw.txt > "$out_dir"/APA_formatted.txt
 
-Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${version_dir_A}" "${c}" "${d}" "$out_dir/${version_dir_A}_APA.pdf" ${win_size} "${b}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
+Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${version_dir_A}" "${c}" "${d}" "$out_dir/${version_dir_A}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
 
 # Delete the specified directories and files after R script is called
-rm -r "$out_dir/$b"
+rm -r "$out_dir/$r"
 rm "$out_dir"/APA_raw.txt
 rm "$out_dir"/APA_formatted.txt
 
@@ -329,12 +329,12 @@ then
 
     echo -e "\nBeginning APA...\n"
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
-    out_mat_A=$out_dir/$b/gw/APA.txt
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
+    out_mat_A=$out_dir/$r/gw/APA.txt
     mv "$out_mat_A" "$out_dir"/APA_raw_${version_dir_A}.txt
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$b" -w $win_size "$pair2" "$P" "$out_dir" &> /dev/null
-    out_mat_B=$out_dir/$b/gw/APA.txt
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$P" "$out_dir" &> /dev/null
+    out_mat_B=$out_dir/$r/gw/APA.txt
     mv "$out_mat_B" "$out_dir"/APA_raw_${version_dir_B}.txt
 
     #----------------------------------
@@ -344,10 +344,10 @@ then
 
     awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$version_dir_B.txt > "$out_dir"/APA_formatted_$version_dir_B.txt
 
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$version_dir_A.txt" "$out_dir/APA_formatted_$version_dir_B.txt" "${version_dir_A}" "${version_dir_B}" "${c}" "${d}" $"$out_dir/${version_dir_A}_v_${version_dir_B}_APA.pdf" ${win_size} "${b}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$version_dir_A.txt" "$out_dir/APA_formatted_$version_dir_B.txt" "${version_dir_A}" "${version_dir_B}" "${c}" "${d}" $"$out_dir/${version_dir_A}_v_${version_dir_B}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
 
     # Delete the specified directories and files after R script is called
-    rm -r "$out_dir/$b"
+    rm -r "$out_dir/$r"
     rm "$out_dir"/APA_raw_$version_dir_A.txt
     rm "$out_dir"/APA_raw_$version_dir_B.txt
     rm "$out_dir"/APA_formatted_$version_dir_A.txt
