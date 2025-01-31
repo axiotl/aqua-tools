@@ -44,7 +44,7 @@ function help {
     echo
     echo "   -P|--bedpe          : Path to 7-col .bedpe"
     echo "   -A|--sample1        : Name of sample"
-    echo "   -G|--genome         : Genome build the sample was processed using"
+    echo "   -G|--genome         : Genome build used for sample processing"
     echo "   -B|--bed            : Path to the sample's H3K27ac/ATAC/DNAse peaks .bed file"
     echo "  [-U|--user_bed      ]: Paths to any other .bed files"
     echo "  [-h|--help          ]  Help message"
