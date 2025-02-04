@@ -28,13 +28,13 @@ cd $working_dir                         # <-- place the Dockerfile from GitHub i
 
 ii. Build the image (this can take upto 30 minutes)
 ```
-sudo docker build -t aqua_tools:1 .
+sudo docker build -t aqua_tools .
 ```
 
 iii. Run the container and get started!
 (once inside the container, keep all outputs in `~/container_outputs` to access them after exiting)
 ```
-sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools:1
+sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
 ```
 
 
@@ -57,13 +57,14 @@ All AQuA tools can be listed using-
 list_tools
 ```
 
-### Loop calling:
+### I. Loop calling:
 
 We use `extract_bedpe` to call loops using a sample of interest. 
 The tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
 All outputs are printed in standard out in `.bedpe` format
+
+#### Loop calling for a range/interval:
 ```
-# local loop calling 
 sample=K562_H3K27ac
 genome=hg38
 range=chr8:127000000:130000000      # <-- MYC locus
@@ -73,8 +74,13 @@ extract_bedpe \
  --sample1 $sample \
  --genome $genome \
  --range $range > $output_dir/MYC.bedpe
+```
 
-# genome-wide loop calling
+#### Loop calling genome-wide:
+```
+sample=K562_H3K27ac
+genome=hg38
+output_dir=/home/ubuntu/container_outputs
 TAD_file=/home/ubuntu/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
 
 extract_bedpe \
@@ -83,7 +89,7 @@ extract_bedpe \
  --TAD $TAD_file > $output_dir/K562_genome-wide-loops.bedpe
 ```
 
-### Visualization:
+### II. Visualization:
 
 Seeing is believing!
 We can easily visualize any locus of interest of a sample using `plot_contacts`, 
