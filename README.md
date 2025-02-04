@@ -95,6 +95,11 @@ Seeing is believing!
 We can easily visualize any locus of interest of a sample using `plot_contacts`, 
 and overlay the called loops to assess our loop calls
 ```
+sample=K562_H3K27ac
+genome=hg38
+range=chr8:127000000:130000000
+output_dir=/home/ubuntu/container_outputs
+
 plot_contacts \
  --sample1 $sample \
  --genome $genome \
