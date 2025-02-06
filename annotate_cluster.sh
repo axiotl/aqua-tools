@@ -48,6 +48,29 @@ function help {
     echo "   -B|--bed            : Path to the sample's H3K27ac/ATAC/DNAse peaks .bed file"
     echo "  [-U|--user_bed      ]: Paths to any other .bed files"
     echo "  [-h|--help          ]  Help message"
+    echo
+    echo "---------------"
+    echo "The output of this tool is a table with the following outputs-"
+    echo "Column  1 = cluster id"
+    echo "Column  2 = cluster chr"
+    echo "Column  3 = cluster start"
+    echo "Column  4 = cluster end"
+    echo "Column  5 = number of loop-structures in cluster"
+    echo "Column  6 = total CPM count of cluster"
+    echo "Column  7 = total size of cluster (end - start)"
+    echo "Column  8 = total size of loops in the cluster"
+    echo "Column  9 = total size of bed_B peaks in the cluster"
+    echo "Column 10 = total number of bed_B peaks in the cluster"
+    echo "Column 11 = total number of alternate TSSs"
+    echo "Column 12 = total number of lncRNAs"
+    echo "Column 13 = total number of housekeeping genes"
+    echo "Column 14 = total number of protein-coding genes"
+    echo "Column 15 = total number of ENCODE-3 cCRE enhancers"
+    echo "Column 16 = total number of ENCODE-3 cCRE CTCF sites"
+    echo "Column 17 = total number of UCSC CpG sites"
+    echo "Column 18 = names of lncRNAs"
+    echo "Column 19 = names of housekeeping genes"
+    echo "Column 20 = names of protein-coding genes"
     exit;
 }
 
@@ -162,9 +185,9 @@ bedtools intersect \
 clusters=$(cut -f 7 $P | sort -V | uniq)
 
 
-header="Cluster\tchr\tstart\tend\tDegree\tTotal_sum\tWedge_short\tWedge_long\tRange_span\tBin_span\tPeak_span\t\
-Num_-B_peaks\tNum_Alternate_TSSs\tNum_lncRNA\tNum_Housekeeping_Genes\tNum_All_Genes(protein_coding)\tNum_ENCODE-3_Enh\tNum_ENCODE-3_CTCF\tNum_UCSC_CpG\t\
-LncRNAs\tHousekeeping_Genes\tAll_Genes(protein_coding)\tNum_Enh-Enh_loops\tNum_Enh-Pro_loops\tNum_Pro-Pro_loops"
+header="Cluster\tchr\tstart\tend\tDegree\tTotal_sum\tRange_span\tBin_span\tPeak_span\t\
+Num_bed-B_peaks\tNum_Alternate_TSSs\tNum_lncRNA\tNum_Housekeeping_Genes\tNum_All_Genes(protein_coding)\tNum_ENCODE-3_Enh\tNum_ENCODE-3_CTCF\tNum_UCSC_CpG\t\
+LncRNAs\tHousekeeping_Genes\tAll_Genes(protein_coding)"
 
 
 for user_bed in "${USER_BED_FILES[@]}"; do
@@ -203,16 +226,16 @@ for cluster in $clusters; do
 
 
     # 4. summarise_interval
-    echo -e "$chr\t$start\t$end" > $temp_dir/"${cluster}_subset_range.bed"
-
-    $aqua_dir/summarize_interval.sh \
-     --input $temp_dir/"${cluster}_subset_range.bed" \
-     --sample1 $A \
-     --genome $G \
-     --resolution 5000 > $temp_dir/"${cluster}_subset_summary.bed"
-
-    short_count=$(tail -1 $temp_dir/"${cluster}_subset_summary.bed" | cut -f 4)
-    long_count=$(tail -1 $temp_dir/"${cluster}_subset_summary.bed"  | cut -f 5)
+    #echo -e "$chr\t$start\t$end" > $temp_dir/"${cluster}_subset_range.bed"
+    #
+    #$aqua_dir/summarize_interval.sh \
+    # --input $temp_dir/"${cluster}_subset_range.bed" \
+    # --sample1 $A \
+    # --genome $G \
+    # --resolution 5000 > $temp_dir/"${cluster}_subset_summary.bed"
+    #
+    #short_count=$(tail -1 $temp_dir/"${cluster}_subset_summary.bed" | cut -f 4)
+    #long_count=$(tail -1 $temp_dir/"${cluster}_subset_summary.bed"  | cut -f 5)
 
 
     # 5. range_span
@@ -364,40 +387,10 @@ for cluster in $clusters; do
         paste -sd, - )
 
 
-    #9. Loop breakdown
-    E_E=0
-    E_P=0
-    P_P=0
 
-    $aqua_dir/intersect_bedpe.sh \
-     --bedpe $temp_dir/"${cluster}_subset.bedpe" \
-     --bed_A $temp_dir/sample_tss.bed \
-     --bed_B $temp_dir/sample_enh.bed > $temp_dir/"${cluster}_subset-intersect.bedpe"
-
-    awk 'BEGIN {OFS="\t"} {print $1, $2, $3, $4, $5, $6, $NF}' $temp_dir/"${cluster}_subset-intersect.bedpe" | \
-    sort | uniq | \
-    cut -f 7 | \
-    sort | uniq -c > $temp_dir/"${cluster}_loop-breakdown.txt"
-
-    while read -r count pair; do
-        case $pair in
-            "B-B")
-                E_E=$((E_E + count))
-                ;;
-            "A-B"|"B-A")
-                E_P=$((E_P + count))
-                ;;
-            "A-A")
-                P_P=$((P_P + count))
-                ;;
-        esac
-    done < <(awk '{print $1, $2}' $temp_dir/"${cluster}_loop-breakdown.txt")
-
-
-
-    output="${cluster}\t${chr}\t${start}\t${end}\t${degree}\t${total_count}\t${short_count}\t${long_count}\t${range_span}\t${bin_span}\t${peak_span}\t"\
+    output="${cluster}\t${chr}\t${start}\t${end}\t${degree}\t${total_count}\t${range_span}\t${bin_span}\t${peak_span}\t"\
 "${num_peaks}\t${num_TSS}\t${num_lncRNA}\t${num_housekeeping_genes}\t${num_genes}\t${num_enhs}\t${num_CTCF}\t${num_CpGs}\t"\
-"${lncRNAs}\t${housekeeping_genes}\t${genes}\t${E_E}\t${E_P}\t${P_P}"
+"${lncRNAs}\t${housekeeping_genes}\t${genes}"
 
 
     for user_bed in "${USER_BED_FILES[@]}"; do
