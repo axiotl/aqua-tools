@@ -31,7 +31,7 @@ function help {
     echo "    -G|--genome                 : Genome build used for sample processing"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
     echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample"
-    echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, aqua, or abc in lower case"
+    echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution          ]  : Bin size you want to use for the APA plots. Default 5000"
     echo " [     --max_cap             ]  : Upper limit of the plot range. Defaults to max bin value"
     echo " [     --min_cap             ]  : Lower limit of the plot range. Default 0"
