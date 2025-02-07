@@ -42,7 +42,7 @@ function help {
     echo "    -G|--genome                          : The genome build the sample(s) has been processed using: hg19, hg38, or mm10"
     echo " [  -O|--output_name                 ]   : Optional name for the plot"
     echo " [  -B|--sample2                     ]   : For two sample delta plots, name of the second sample"
-    echo " [  -Q|--norm                        ]   : Which normalization to use: none, cpm, aqua, or abc in lower case"
+    echo " [  -Q|--norm                        ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution                  ]   : Resolution of sample in basepairs. Default 5000"
     echo " [  -p|--profiles                    ]   : If TRUE profiles drawn along the diagonal, x axis and y axis. Default FALSE"
     echo " [  -o|--color_one_sample            ]   : Color for single sample plots in RGB hexadecimal. Default FF0000"
