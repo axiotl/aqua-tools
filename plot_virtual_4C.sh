@@ -33,7 +33,7 @@ function help {
     echo "    -R|--range              : The genomic range to plot in chr:start:end format; -R chr1:40280000:40530000"
     echo "    -V|--viewpoint          : The viewpoint to consider in chr:start format; -V chr1:40400000"
     echo "  [ -B|--sample2        ]   : For two sample delta plots, name of the second sample"
-    echo "  [ -Q|--norm           ]   : Which normalization to use: none, cpm, aqua, or abc in lower case"
+    echo "  [ -Q|--norm           ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo "  [ -r|--resolution     ]   : Resolution of sample in basepairs. Default 5000"
     echo "  [ -O|--output_name    ]   : Optional name for the plot"
     echo "  [    --quant_cut      ]   : Cap matrix values at a given percentile (0.00-1.00). Default 1.00"
