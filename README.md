@@ -11,8 +11,10 @@ The name 'AQuA' derives from **A**bsolute **QU**antification of chromatin **A**r
 
 ## Installation and Dependencies
 
+### Stand alone installation: 
 
-### Docker: 
+
+### Docker Container: 
 
 Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker is installed on your machine. 
 
