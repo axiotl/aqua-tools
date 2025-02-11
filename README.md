@@ -11,12 +11,10 @@ The name 'AQuA' derives from **A**bsolute **QU**antification of chromatin **A**r
 
 ## Installation and Dependencies
 
-### Stand alone installation: 
-
-
 ### Docker Container: 
+We highly recommend using Docker for an easy and cohesive experience to use AQuA tools.
 
-Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker is installed on your machine. 
+Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker Desktop is installed on your machine. 
 
 Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
 
