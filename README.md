@@ -1,105 +1,161 @@
 # AQuA-Tools
 
-## About
+[![License](https://img.shields.io/github/license/yourusername/aqua-tools)](LICENSE)
 
+## Table of Contents
+- [About](#about)
+- [Use](#Use)
+- [Installation](#installation)
+- [Usage Recipes](#recipes)
+  - [Getting Started](#getting-started)
+  - [Loop Calling](#i-loop-calling)
+  - [Visualization](#ii-visualization)
+- [License](#license)
+
+
+## About
 3D genomics projects have rapidly expanded to include dozens of patients, treatment conditions, and multiple layers of information (H3K27ac, H3K4me3, PolII, CTCF, transcription factors…). [Axiotl Inc.](https://axiotl.com) and the [Gryder lab](https://gryderlab.com) at Case Western Reserve University are developing AQuA tools to facilitate the analysis and visualization of increasingly complex 3D data.
 
-The name 'AQuA' derives from **A**bsolute **QU**antification of chromatin **A**rchitecture, an experimental design in which 3D contacts are counted from paired-end tags (PETs) from the human genome and are normalized to the total PETs from the mouse genome, enabling more quantitative insights into the topological determinants of biology in question. The publication can be found [here](https://www.nature.com/articles/s41596-019-0285-9).
-
+### Publication
 >Gryder, B.E., Khan, J. & Stanton, B.Z. Measurement of differential chromatin interactions with absolute quantification of architecture (AQuA-HiChIP). Nat Protoc 15, 1209–1236 (2020). https://doi.org/10.1038/s41596-019-0285-9
 
+## Availability
+tool chart and description
 
-## Installation and Dependencies
+## Use
+AQuA-Tools can be used through any of the following entrypoints:
+- [Tinker Cloud Platform](#tinker)
+- [Docker Container](#docker)
+- [Local Installation](#local)
 
-### Docker Container: 
+### Tinker
+[Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
+
+- **Immediate Access**: No installation required and immeditely accessible via browser
+- **Pre-loaded Data**: Access to common reference datasets
+- **Access to all tools**: Access to all tools
+
+The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
+- **Collaborative Features**: Share files and analyses with team members
+- **Scalable Computing**: Handle large datasets efficiently
+- **Unlimited access**: No time cap for Tinker use time
+
+To get started with Tinker, visit [tinker](https://tinker.axiotl.com/public)
+
+
+### Docker
 We highly recommend using Docker for an easy and cohesive experience to use AQuA tools.
 
-Sample data and AQuA tools along with all their dependencies can be easily setup via Docker. Before getting started, ensure Docker Desktop is installed on your machine. 
+**Key Features:**
+- Isolated environment with all dependencies
+- Easy updates and version management
+- Access to sample datasets
+- Portable analysis environment
 
-Download the `Dockerfile` available in the Docker folder of this repo and build the image as follows- 
+**Prerequisites:**
+- **Docker Desktop**: Version 20.10.0 or higher
+- **System Requirements**:
+  - CPU: 4+ cores recommended
+  - RAM: 16GB or more recommended
+  - Storage: 6GB free space for Docker image and data
+- **Operating Systems**:
+  - Linux (Ubuntu 18.04+, CentOS 7+)
+  - macOS (10.15+)
 
-
-i. Set up working station
-```
+#### Step 1: Set up working station
+```bash
 working_dir=$HOME/aqua_tools_container  # <-- change this path as per your convenience
 mkdir -p $working_dir
 cd $working_dir                         # <-- place the Dockerfile from GitHub in this directory
 ```
 
-ii. Build the image (this can take upto 30 minutes)
-```
-sudo docker build -t aqua_tools .
+#### Step 2: Build the image
+```bash
+sudo docker build -t aqua_tools .       # This can take up to 30 minutes
 ```
 
-iii. Run the container and get started!
-(once inside the container, keep all outputs in `~/container_outputs` to access them after exiting)
-```
+#### Step 3: Run the container
+```bash
 sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
 ```
 
+**Note**: Keep all outputs in `~/container_outputs` to access them after exiting the container.
+
+### Local 
+For users who need maximum flexibility or have specific system requirements, AQuA-Tools can be installed directly on your local machine.
+
+**Prerequisites:**
+- Python 3.8 or higher
+- R 4.0 or higher
+- gcc/g++ compiler
+- Development libraries for HDF5 and zlib
+
+**Installation Steps:**
+
+1. Install system dependencies:
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y \
+    python3-dev \
+    r-base \
+    libhdf5-dev \
+    zlib1g-dev \
+    build-essential
+```
+
+2.
 
 ## Recipes
+All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
 
-All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses. 
-
-Interested in getting your data to Tinker? Contact us at hello@axiotl.com
-
-### Getting started:
-
-The container comes preloaded with publically available H3K27ac HiChIP samples. 
-This can be viewed using-
-```
+### Getting Started
+View available samples:
+```bash
 list_samples
 ```
 
-All AQuA tools can be listed using-
-```
+List available tools:
+```bash
 list_tools
 ```
 
-### I. Loop calling:
-
-We use `extract_bedpe` to call loops using a sample of interest. 
-The tool expects a genomic interval to call loops, or a TAD file to call loops genome wide.
-All outputs are printed in standard out in `.bedpe` format
+### I. Loop Calling
+We use `extract_bedpe` to call loops using a sample of interest. The tool supports both targeted interval analysis and genome-wide loop calling.
 
 #### Loop calling for a range/interval:
-```
+```bash
 sample=K562_H3K27ac
 genome=hg38
 range=chr8:127000000:130000000      # <-- MYC locus
 output_dir=/home/ubuntu/container_outputs
-
 extract_bedpe \
  --sample1 $sample \
  --genome $genome \
  --range $range > $output_dir/MYC.bedpe
 ```
 
+
 #### Loop calling genome-wide:
-```
+```bash
 sample=K562_H3K27ac
 genome=hg38
 output_dir=/home/ubuntu/container_outputs
 TAD_file=/home/ubuntu/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
-
 extract_bedpe \
  --sample1 $sample \
  --genome $genome \
  --TAD $TAD_file > $output_dir/K562_genome-wide-loops.bedpe
 ```
 
-### II. Visualization:
+### II. Visualization
+Generate visual representations of genomic regions with loop overlay:
 
-Seeing is believing!
-We can easily visualize any locus of interest of a sample using `plot_contacts`, 
-and overlay the called loops to assess our loop calls
-```
+```bash
 sample=K562_H3K27ac
 genome=hg38
 range=chr8:127000000:130000000
 output_dir=/home/ubuntu/container_outputs
-
 plot_contacts \
  --sample1 $sample \
  --genome $genome \
@@ -108,4 +164,9 @@ plot_contacts \
  --output_name $output_dir/MYC.pdf
 ```
 
-The `.bedpe` and `.pdf` files will now be available in your local machine in `$working_dir`
+
+
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
