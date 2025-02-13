@@ -14,7 +14,6 @@ else
     sample_sheet="${SAMPLE_SHEET}"
 fi
 
-
 juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar'
 
 # Check if the current directory is the shared-files folder
@@ -44,7 +43,6 @@ function help {
     echo " [  -B|--sample2                     ]   : For two sample delta plots, name of the second sample"
     echo " [  -Q|--norm                        ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution                  ]   : Resolution of sample in basepairs. Default 5000"
-    echo " [  -p|--profiles                    ]   : If TRUE profiles drawn along the diagonal, x axis and y axis. Default FALSE"
     echo " [  -o|--color_one_sample            ]   : Color for single sample plots in RGB hexadecimal. Default FF0000"
     echo " [  -t|--color_two_sample            ]   : Color for delta plots in RGB hexadecimal separated by '-'; 1E90FF-C71585"
     echo " [     --annotations_default         ]   : Draw bed TSS annotations. Default TRUE"
@@ -99,7 +97,7 @@ for arg in "$@"; do
       "--quant_cut")                    set -- "$@" "-q" ;;
       "--max_cap")                      set -- "$@" "-m" ;;
       "--get_matrix")                   set -- "$@" "-D" ;;
-      "--bedpe")                        set -- "$@" "-P" ;;
+      "--bedpe")                        set -- "$@" "-b" ;;
       "--bedpe_color")                  set -- "$@" "-y" ;;
       "--inherent")                     set -- "$@" "-i" ;;
       "--inh_col_floor")                set -- "$@" "-K" ;;
@@ -124,7 +122,7 @@ c=NONE
 q=1
 m=none
 D=FALSE
-P=FALSE
+b=FALSE
 y=000000
 i="FALSE"
 w="blank"
@@ -138,7 +136,7 @@ f=0
 prefix="_"
 
 # Process all arguments
-while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:P:y:i:K:L:M:N:w:g:T:f:h" OPT
+while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:b:y:i:K:L:M:N:w:g:T:f:h" OPT
 do
   case $OPT in
     A) A=$OPTARG;;
@@ -171,7 +169,7 @@ do
     q) q=$OPTARG;;
     m) m=$OPTARG;;
     D) D=$OPTARG;;
-    P) P=$OPTARG;;
+    b) b=$OPTARG;;
     y) y=$OPTARG;;
     i) i=$OPTARG;;
     K) K=$OPTARG;;
@@ -195,6 +193,27 @@ do
       ;;
   esac
 done
+
+echo
+# Filter annotation files: remove files that don't exist or don't have at least 3 tab-separated columns
+VALID_ANNOTATION_FILES=()
+for file in "${ANNOTATION_FILES[@]}"; do
+  if [ ! -f "$file" ]; then
+    echo -e "Annotation file '$file' does not exist. It will be skipped." >&2
+    continue
+  fi
+
+  # Check the first few lines to see if they have at least 3 columns and are tab or space separated
+  if ! head -n 5 "$file" | awk -F'[ \t]+' '{ if (NF < 3) { exit 1 } }'; then
+    echo -e "Annotation file '$file' does not have at least 3 tab or space separated columns. It will be skipped." >&2
+    continue
+  fi
+
+  VALID_ANNOTATION_FILES+=("$file")
+done
+
+# Replace the original array with the valid files only
+ANNOTATION_FILES=("${VALID_ANNOTATION_FILES[@]}")
 
 # Set custom annotation files and colors or return to default
 if [ ${#ANNOTATION_FILES[@]} -eq 0 ]; then
@@ -255,6 +274,19 @@ get_sample_directory() {
     fi
 }
 
+#----------------------------------
+
+if [[ -z $G ]]; then
+  usage
+  exit
+elif [[ $G != "hg38" && $G != "hg19" && $G != "mm10" ]]; then
+  echo -e "\nInvalid value for G. It must be 'hg38', 'hg19', or 'mm10'.\n"
+  usage
+  exit 1
+fi
+
+#----------------------------------
+
 # Update sample A
 sample_dir_A=$(get_sample_directory "$A")
 if [ $? -eq 0 ]; then
@@ -267,15 +299,15 @@ else
 fi
 
 #----------------------------------
-
-if [[ -z $G ]]; then
-  usage
-  exit
-elif [[ $G != "hg38" && $G != "hg19" && $G != "mm10" ]]; then
-  echo -e "\nInvalid value for G. It must be 'hg38', 'hg19', or 'mm10'.\n"
-  usage
-  exit 1
-fi
+case "$r" in
+  1000|5000|10000|25000|50000|100000|250000|500000|1000000|2500000)
+    # Value is accepted
+    ;;
+  *)
+    echo -e "\n--resolution '$r' is not accepted.\nAccepted resolutions are: 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000\n"
+    exit 1
+    ;;
+esac
 
 #----------------------------------
 
@@ -298,9 +330,11 @@ if [[ ! -z $g ]]; then
     # Set files based on the value of $G
     bed_tss=""
     if [[ $G == "hg19" ]]; then
-        bed_tss="$data_dir/$G/reference/TSS.3000.bed"
+        bed_tss="$data_dir/$G/reference/GENCODE_TSSs_hg19.bed"
     elif [[ $G == "hg38" ]]; then
         bed_tss="$data_dir/$G/reference/GENCODE_TSSs_hg38.bed"
+    elif [[ $G == "mm10" ]]; then
+        bed_tss="$data_dir/$G/reference/GENCODE_TSSs_200bp_mm10.bed"
     fi
 
     # Check if two genes are provided for interchromosomal range
@@ -476,15 +510,14 @@ fi
 
 
 # Check bedpe
-if [ "$P" = "FALSE" ]; then
-    echo -e "\nNo BEDPE file supplied to highlight contact plot\n"
+if [ "$b" = "FALSE" ]; then
+    echo -e "No BEDPE file supplied to highlight contact plot\n"
 else
     # Check if file exists
-    if [ ! -f "$P" ]; then
-        echo "BEDPE file $P does not exist"
-        echo "Continuing without --bedpe ..."
+    if [ ! -f "$b" ]; then
+        echo "BEDPE file $b does not exist. It will be skipped."
         echo
-        P="FALSE"
+        b="FALSE"
     else
     # Check number of columns and coordinate ordering
         awk_output=$(awk '
@@ -507,17 +540,34 @@ else
                 exit 1
             }
             exit 0
-        }' "$P")
+        }' "$b")
         
         # Check the exit status of awk
         if [ $? -ne 0 ]; then
             echo "$awk_output"
-            echo "Continuing without --bedpe $P ..."
+            echo "Continuing without --bedpe $b ..."
             echo
-            P="FALSE"
+            b="FALSE"
         fi
     fi
 fi
+
+if [[ "$p" == "TRUE" ]]; then
+  echo -e "--profiles has been deprecated. Contact Axiotl if needed. Continuing...\n"
+  p=FALSE  # Ensure it remains FALSE
+fi
+
+if [[ "$m" != "none" && "$q" != "1" ]]; then
+  echo -e "\nPlease provide either max_cap or quant_cut, not both\n"
+  exit 1
+fi
+
+if [[ "$Q" != "blank" && "$Q" != "none" && "$Q" != "cpm" && "$Q" != "aqua" ]]; then
+  echo -e "\n--norm should strictly be none, cpm, or aqua in lower case\n"
+  exit 1
+fi
+
+
 ###########################################################################
 ###########################################################################
 ###                                                                     ###
@@ -547,7 +597,7 @@ fi
 
   if [[ -n $t ]]; 
   then 
-    echo "Oops! Looks like you provided the wrong parameter for contact color!"
+    echo -e "\nOops! Looks like you provided the wrong parameter for contact color!\n"
     usage
     exit
   fi
@@ -609,7 +659,7 @@ fi
     $Q \
     $q \
     $O \
-    $P \
+    $b \
     $y \
     $i \
     $sample_dir \
@@ -673,7 +723,7 @@ then
 
   if [[ -n $o ]]; 
   then 
-    echo "\nOops! Looks like you provided the wrong parameter for contact color\n!"
+    echo -e "\nOops! Looks like you provided the wrong parameter for contact color!\n"
     usage
     exit
   fi
@@ -741,7 +791,7 @@ then
     $Q \
     $q \
     $O \
-    $P \
+    $b \
     $y \
     $w \
     $sample_dirA $sample_dirB \
@@ -753,6 +803,3 @@ then
     $i
 
 fi
-
-exit_status=$?
-
