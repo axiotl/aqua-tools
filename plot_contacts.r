@@ -17,18 +17,13 @@ flag_inter    <- Args[2]
 
 calculate_w <- function(
     plot_width, 
-    plot_height, 
-    genomic_range,
-    resolution ){
+    plot_height,
+    A){
   
-  range_length <- genomic_range[2] - genomic_range[1]
   aspect_ratio <- plot_height / plot_width
   
-  # calculate maximum number of bins that can fit on the page
-  # +1 ensures 1 bin buffer on the right for y-axis profiles
-  
-  max_bins_h <- floor(range_length / resolution)+1 
-  w <- aspect_ratio * plot_width / max_bins_h
+  diagonal_bins <- ceiling(sqrt(nrow(A)^2 + nrow(A)^2))
+  w <- (aspect_ratio * plot_width / diagonal_bins)
   
   return(w)
 }
@@ -43,11 +38,17 @@ calculate_cap <- function(
   # Function to calculate skewness
   calculate_skewness <- function(values) {
     n <- length(values)
+    if (n < 2) {
+      return(0)
+    }
     mean_val <- mean(values)
     sd_val <- sd(values)
-    return ((n / ((n - 1) * (n - 2))) * sum(((values - mean_val) / sd_val) ^ 3))
+    if (sd_val == 0) {
+      return(0)
+    }
+    return((n / ((n - 1) * (n - 2))) * sum(((values - mean_val) / sd_val) ^ 3))
   }
-
+  
   if (all(denMat == 0)) {
     cat(sprintf("\nNo contact values found for this interval at resolution %d\n", bin_size))
     quit()
@@ -81,6 +82,11 @@ calculate_cap <- function(
       non_zero_values <- modified_mat[modified_mat != 0]
     } else {
       non_zero_values <- denMat[denMat != 0]
+    }
+    
+    if (length(non_zero_values) == 0) {
+      cat("\nNot enough data to plot. Please decrease the resolution or increase the range\n")
+      quit(save = "no", status = 1)
     }
     
     # Calculate skewness
@@ -222,203 +228,219 @@ draw_scale_inh <- function(
   
 }
 
-draw_feature_2 <- function( 
-    chr, 
-    up, 
-    do, 
-    txt, 
-    col, 
-    sh, 
-    flag_text, 
-    offset ){
-  
-  text_margin <- 1
-  
-  if (missing(offset)){
-    offset_horizontal <- 8.0
-  } else {
-    offset_horizontal <- 8.0 * offset
+
+# Determine if a gene overlaps any BEDPE region
+is_gene_in_bedpe <- function(gene_start, gene_end, pairs) {
+  if (!is.data.frame(pairs) || nrow(pairs) == 0) {
+    return(FALSE)
   }
   
-  offset_vertical   <- 0.6
-  
-  str <- ( up - interval_start ) / interval_len * w * (ncol(A)-1)
-  end <- ( do - interval_start ) / interval_len * w * (ncol(A)-1)
-  
-  lines(
-    c(    str-sh,     end-sh),
-    c(top-str, top-end),
-    col = col, lwd = 0.5 )
-  
-  if ( flag_text ){
+  for (p in seq_len(nrow(pairs))) {
+    # Define region 1 and region 2 for this BEDPE pair
+    region1_start <- pairs$start1_bin[p]
+    region1_end   <- pairs$end1_bin[p]
+    region2_start <- pairs$start2_bin[p]
+    region2_end   <- pairs$end2_bin[p]
     
-    txt_coord <- sprintf( "%s:%d-%d", chr, up, do )
-    
-    text(
-      str - sh - offset_horizontal, 
-      top - str - text_margin,       
-      labels = txt_coord,
-      col = col, offset = 0.1, pos = 4, cex = 0.2
-    )
+    # Check if the gene overlaps region 1
+    if (gene_end >= region1_start && gene_start <= region1_end) {
+      return(TRUE)
+    }
+    # Check if the gene overlaps region 2
+    if (gene_end >= region2_start && gene_start <= region2_end) {
+      return(TRUE)
+    }
+  }
+  return(FALSE)
+}
 
-    text(
-      str - sh - offset_horizontal,                
-      top - str - text_margin + offset_vertical, 
-      labels = txt,
-      col = col, offset = 0.1, pos = 4, cex = 0.28
-    )
 
-    # Dotted line connecting text to the start of the line
-    segments(
-      str - sh - (0.5 * offset_horizontal), # Text horizontal position
-      top - str,                            # Same y-coordinate as the line
-      str - sh,                             # Line horizontal position
-      top - str,                            # Same y-coordinate as the line
-      col = "#B2B2B2", lwd = 0.5, lty = "dotted"
-    )
+draw_feature_2 <- function(chr, start_pos, end_pos, label_txt, color, y_offset, flag_text, gene_cex=gene_cex, coord_cex=coord_cex) {
+
+  scale_factor <- w * (ncol(A)-1) / interval_len # ncol(A)-1 removes annotation drift, related to strawr indexing 
+
+  # Compute the x positions (in plot coordinates) corresponding to genomic start and end
+  x_start <- ((start_pos - interval_start) * scale_factor) - (w*0.5) # shift half w to beginning of bin
+  x_end   <- ((end_pos - interval_start) * scale_factor) - (w*0.5)
+
+  y_pos <- 50 - y_offset
+
+  # Draw line for gene span
+  lines(c(x_start, x_end), rep(y_pos, 2), col = color, lwd = 0.5)
+
+  if (flag_text) {
+    composite_label <- sprintf("%s:%d-%d", chr, start_pos, end_pos)
+
+    # Add gene coordinates
+    text(x_start, y_pos, labels = composite_label, col = color,
+         offset = -0.07, pos = 2, cex = coord_cex, srt = 45)
+    # Add gene name in larger text size
+    text(x_start, y_pos, labels = label_txt, col = color,
+         offset = 0.07, pos = 2, cex = gene_cex, srt = 45)
+
+    # Draw a dotted vertical line connecting the annotation to the plot
+    segments(x_start, y_pos, x_start, 45, col = "#B2B2B2", lwd = 0.2, lty = "dotted")
+  } else {
+    # Dotted lines for custom annotations (when flag text = FALSE)
+    segments(x_start, y_pos, x_start, 45, col = "#B2B2B2", lwd = 0.2, lty = "dotted")
+    segments(x_end, y_pos, x_end, 45, col = "#B2B2B2", lwd = 0.2, lty = "dotted")
   }
 }
 
-draw_bed <- function(
-    bed_file, 
-    color, 
-    depth, 
-    flag_text) {
-  
-  offset <- bin_size/2	
+
+draw_bed <- function(bed_file, color, depth, flag_text) {
   if (!file.exists(bed_file)) {
-    cat("draw_bed error: file not found\n")
-    stop()
+    stop("draw_bed error: file not found")
   }
   
-  bed <- read.table(bed_file, as.is = TRUE)
+  bed <- read.table(bed_file, as.is = TRUE, header = FALSE)
   colnames(bed) <- c("chr", "start", "end")
   
-  if (nrow(bed) > 0) {
-    
-    # make sure there's a fourth column for text
-    if (ncol(bed) == 3 && flag_text) {
-      flag_text <- FALSE
-      cat("draw_bed error: no additional columns to print as text\n")}
-    
-    # subset the bed file to the visualized interval
-    bed <- bed[bed[,"chr"] == interval_chr, ]
-    bed <- bed[bed[,"start"] < interval_end & bed[,"end"] > interval_start, ]
-    
-    # get index of bins for each element in bed
-    bin_index <- floor(bed[,"start"] / bin_size)
-    bed <- bed[order(bin_index),]
-    
-    # get counts inside each bin
-    bin_counts <- table(bin_index)
-    
-    # find genes that fall within each bin
-    for (i in seq_along(bin_counts)) {
-      bin_names <- names(bin_counts)[i]
-      gene_index <- which(bin_index == bin_names)
-      
-      # retrieve gene information from bed using index
-      for (j in seq_along(gene_index)) {
-        b <- bed[gene_index[j],]
-        if(flag_text) { btxt <- b[4] } else { btxt <- "" }
-        
-        # print in place if one gene/bin
-        if (length(gene_index) == 1) {	
-          draw_feature_2(b$chr, b$start, b$end, btxt, color, depth, flag_text)
-        }    
-        
-        # offset labels for two genes in the same bin
-        if (length(gene_index) == 2) {
-          if (j %% 2 == 0) {
-            # even numbered rows
-            b[2] <- b[2] + offset
-            draw_feature_2(b$chr, b$start, b$end, btxt, color, depth, flag_text, length(gene_index))
-          } else {									        # odd numbered rows
-            b[2] <- b[2] - offset
-            draw_feature_2(b$chr, b$start, b$end, btxt, color, depth, flag_text, length(gene_index))
-          }
-        }
-      }
-      if (length(gene_index) > 2) {
-        btxt <- paste0(bed[gene_index,4], collapse = ", ")
-        draw_feature_2(b$chr, b$start, b$end, btxt, color, depth, flag_text, length(gene_index))
-      } 
+  # Subset the BED features to visualized genomic interval
+  bed <- bed[bed$chr == interval_chr & bed$start < interval_end & bed$end > interval_start, ]
+  if (nrow(bed) == 0) {
+    warning("draw_bed warning: no features in the specified interval")
+    return()
+  }
+  
+  # Clip the feature boundaries to visualized interval
+  bed$start <- pmax(bed$start, interval_start)
+  bed$end   <- pmin(bed$end, interval_end)
+  
+  if (!flag_text) {
+    for (i in seq_len(nrow(bed))) {
+      b <- bed[i, ]
+      draw_feature_2(b$chr, b$start, b$end, label_txt = "",
+                     color = color, y_offset = depth, flag_text = FALSE)
     }
-  } else {
-    cat("draw_bed error: empty bed file\n")
+    return()
+  }
+  
+  # Gene annotations
+  bin_index <- floor(bed$start / bin_size)
+  bed <- bed[order(bin_index), ]
+  bin_counts <- table(bin_index)
+  
+  for (bin in names(bin_counts)) {
+    feature_indices <- which(bin_index == bin)
+    for (j in seq_along(feature_indices)) {
+      b <- bed[feature_indices[j], ]
+      # Adjust vertical offset for multiple genes per bin
+      current_offset <- depth - (j - 1) * (-4)
+      
+      label_txt <- if (ncol(b) >= 4) b[[4]] else ""
+      
+      # Set gene name and coordinate sizes
+      if (exists("pairs") && nrow(pairs) > 0 &&
+          is_gene_in_bedpe(b$start, b$end, pairs)) {
+        gene_cex  <- 0.21   
+        coord_cex <- 0.08
+      } else {
+        gene_cex  <- 0.13
+        coord_cex <- 0.05
+      }
+      
+      draw_feature_2(b$chr, b$start, b$end, label_txt, color, current_offset,
+                     flag_text = TRUE, gene_cex = gene_cex, coord_cex = coord_cex)
+    }
   }
 }
 
-draw_contacts <- function( 
-    A, 
-    C, 
-    left_side, 
-    bedpe ){
-  
-  for ( i in 1:nrow(A) ){
-    for (j in i:ncol(A)){
-      color <- rownames(C[ order( abs( C[,"breaks"] - A[i,j] ), decreasing = FALSE ), ])[1]
-      
-      rect(
-        left_side + (j-1)*w, top-(i-1)*w,
-        left_side +  j   *w, top- i   *w,
-        col = color, border = NA )
-    }
-    text(
-      (j+1)*w, top-(i-0.5)*w,
-      labels = i, cex = 0.03, col = "#dddddd" )
+
+draw_contacts <- function(A, C, left_side, bedpe) {
+  start_x <- 0
+  start_y <- 90
+
+  # Compute diamond center coordinates given matrix indices
+  get_center <- function(i, j, w) {
+    cx <- start_x + (j - 1) * w + (i - 1) * w
+    cy <- start_y + (i - 1) * (-w) + j * w
+    c(cx, cy)
   }
-  
-  if( bedpe != "FALSE" ){
-    
-    bedpe_coordinates <- data.frame(
-      x1 = c(), y1 = c(),
-      x2 = c(), y2 = c() )
-    
-    for( i in 1:nrow(pairs)){
-      
-      bedpe_coordinates[i,"x1"] <- which( pairs[i,"start2_bin"] == colnames(A) )
-      bedpe_coordinates[i,"y1"] <- which( pairs[i,"end1_bin"  ] == rownames(A) )
-      
-      bedpe_coordinates[i,"x2"] <- which( pairs[i,"end2_bin"  ] == colnames(A) )
-      bedpe_coordinates[i,"y2"] <- which( pairs[i,"start1_bin"] == rownames(A) )
+
+  # Compute diamond vertices from the center
+  get_vertices <- function(center, w) {
+    list(
+      left   = c((center[1] - w) / 2, center[2] / 2),
+      top    = c(center[1] / 2, (center[2] + w) / 2),
+      right  = c((center[1] + w) / 2, center[2] / 2),
+      bottom = c(center[1] / 2, (center[2] - w) / 2)
+    )
+  }
+
+  # Draw a diamond given its center
+  draw_diamond <- function(center, w, color, highlight = FALSE) {
+    verts <- get_vertices(center, w)
+    x_coords <- c(verts$left[1], verts$top[1], verts$right[1], verts$bottom[1])
+    y_coords <- c(verts$left[2], verts$top[2], verts$right[2], verts$bottom[2])
+    polygon(x_coords, y_coords, col = color, border = NA)
+    if (highlight) {
+      polygon(x_coords, y_coords, col = color, border = bedpe_color, lwd = 0.5)
     }
-    
-    
-    for( i in 1:nrow(bedpe_coordinates)){
-      
-      if( bedpe_coordinates[i,"x1"] != bedpe_coordinates[i,"y2"] &&
-          bedpe_coordinates[i,"y1"] != bedpe_coordinates[i,"x2"]){
-        
-        x1 <- bedpe_coordinates[i,"x1"]
-        y1 <- bedpe_coordinates[i,"y1"]
-        x2 <- bedpe_coordinates[i,"x2"] - 1
-        y2 <- bedpe_coordinates[i,"y2"] - 1
-        
-        rect(
-          (x1-1)*w, top-(y1-1)*w,
-          x2   *w, top- y2   *w,
-          border = bedpe_color )
-        
-      } else if( bedpe_coordinates[i,"x1"] == bedpe_coordinates[i,"y2"] &&
-                 bedpe_coordinates[i,"y1"] == bedpe_coordinates[i,"x2"] ){
-        
-        x1 <-       w*(bedpe_coordinates[i,"x1"] - 1)
-        y1 <- top - w*(bedpe_coordinates[i,"y2"] - 1)
-        x2 <-       w*(bedpe_coordinates[i,"x2"] - 1)
-        y2 <- top - w*(bedpe_coordinates[i,"y2"] - 1)
-        x3 <-       w*(bedpe_coordinates[i,"x2"] - 1)
-        y3 <- top - w*(bedpe_coordinates[i,"y1"] - 1)
-        
-        polygon(
-          c(x1,x2,x3),
-          c(y1,y2,y3),
-          border = bedpe_color )
+  }
+
+  # Draw all diamonds
+  bin_coordinates <- colnames(A)
+  n_rows <- nrow(A)
+  n_cols <- ncol(A)
+
+  for (i in seq_len(n_rows)) {
+    for (j in i:n_cols) {
+      color <- rownames(C[order(abs(C[,"breaks"] - A[i, j]), decreasing = FALSE), ])[1]
+      center <- get_center(i, j, w)
+      draw_diamond(center, w, color, highlight = FALSE)
+    }
+
+    # Set annotation interval based on bin size
+    annotation_interval <- if (bin_size == 1000) 20 else 10
+
+    for (j in seq(1, n_cols, by = annotation_interval)) {
+      bin_label <- bin_coordinates[j]
+      label_x <- (start_x + (j - 1) * w)-(0.5*w)
+      label_y <- 44.25
+      text(label_x, label_y, labels = bin_label, cex = 0.05, col = "#8B8B8B")
+      segments(x0 = label_x, y0 = 45, x1 = label_x, y1 = label_y + 0.25,
+               col = "#B2B2B2", lty = "dotted", lwd = 0.2)
+    }
+  }
+  # Draw BEDPE highlight polygons
+  if (bedpe != "FALSE") {
+    for (p in seq_len(nrow(pairs))) {
+
+      i_start <- pairs$i[p]
+      i_end   <- pairs$i_end[p]
+      j_start <- pairs$j[p]
+      j_end   <- pairs$j_end[p]
+
+      # Check if this BEDPE feature is within a single bin
+      if (i_start == i_end && j_start == j_end) {
+        # Single bin highlight: draw the diamond's border for that bin
+        center <- get_center(i_start, j_start, w)
+        draw_diamond(center, w, color = NA, highlight = TRUE)
+      } else {
+        # Multi-bin highlight: get the vertices for the four outer diamonds
+        left_center   <- get_center(i_start, j_start, w)
+        left_v        <- get_vertices(left_center, w)$left
+
+        top_center    <- get_center(i_start, j_end, w)
+        top_v         <- get_vertices(top_center, w)$top
+
+        right_center  <- get_center(i_end, j_end, w)
+        right_v       <- get_vertices(right_center, w)$right
+
+        bottom_center <- get_center(i_end, j_start, w)
+        bottom_v      <- get_vertices(bottom_center, w)$bottom
+
+        polygon(x = c(left_v[1], top_v[1], right_v[1], bottom_v[1]),
+                y = c(left_v[2], top_v[2], right_v[2], bottom_v[2]),
+                border = bedpe_color, col = NA, lwd = 0.5)
       }
-      
     }
   }
 }
+
+
+
 
 draw_title <- function(
     interval_chr, 
@@ -453,273 +475,6 @@ draw_title <- function(
   text(-2, top + 2, labels = title, col = "#888888", pos = 4, cex = 0.8)
 }
 
-draw_profiles <- function( ){
-  
-  if(analysis_type == "single_sample"){
-    
-    pos_profile_gap <- 1.1	
-    
-    ## diagonal profiles
-    
-    off_diagonals <- get_diagonals( A, 3 )
-    
-    off_diagonals_positive <- off_diagonals ; off_diagonals_positive[ off_diagonals_positive < 0 ] <- 0
-    
-    means_positive  <- apply( off_diagonals_positive, 1, mean ) ; means_positive <- c( means_positive, 0 )
-    
-    means_positive  <- smooth.spline( means_positive )$y
-    means_positive  <- means_positive /   max( means_positive )
-    
-    for ( k in 1:I ){
-      for (j in k:J ){
-        
-        x_source <-       (k-0.5)*w - pos_profile_gap
-        y_source <- top - (k-0.5)*w - pos_profile_gap
-        
-        x_target <- x_source - means_positive[k] #* profile_scale_factor
-        y_target <- y_source - means_positive[k] #* profile_scale_factor				            
-        lines( c( x_source , x_target ) , c( y_source , y_target ), col = contact_color, lwd = 0.8 )
-        
-        if( means_positive[k] == max( means_positive ) ){
-          text( x_target - 2*w, y_target - 2*w, labels = format(means_positive[k], nsmall = 3), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-        }
-      }
-    }
-    
-    pos_profile_gap       <- 0.25
-    
-    ## x-axis profiles
-    
-    x_profile <- c()
-    
-    for( j in 3:J ){
-      
-      observations <- A[, j]
-      observations[observations < 0] <- 0
-      x_profile[(j-2)]  <- mean( observations )
-      
-    }
-    
-    x_profile <- smooth.spline(x_profile)$y
-    x_profile  <- x_profile /  max( x_profile ) 
-    
-    for( j in 3:J ){
-      
-      x_source <-       (j-0.5)*w
-      y_source <- top + pos_profile_gap
-      x_target <- x_source
-      y_target <- y_source + x_profile[(j-2)] #* profile_scale_factor
-      
-      lines( c( x_source , x_target ) , c( y_source , y_target ), col = contact_color, lwd = 0.8 )
-      
-      if( x_profile[(j-2)] == max( x_profile ) ){
-        text( x_target, y_target + 2*w, labels = format( x_profile[(j-2)], nsmall = 3 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-      }
-    }
-    
-    
-    ## y-axis profiles
-    
-    y_profile <- c()
-    
-    for( i in 1:(I-3) ){
-      observations  <- A[i ,]
-      observations[observations < 0] <- 0
-      y_profile[i]  <- mean( observations )
-    }
-    
-    y_profile <- smooth.spline(y_profile)$y
-    y_profile  <- y_profile /  max( y_profile ) 
-    
-    for( i in 1:(I-3) ){
-      x_source <- I*w   +  pos_profile_gap
-      y_source <- top   -  (i-0.5)*w
-      
-      x_target <- x_source + y_profile[i]
-      y_target <- y_source  #* profile_scale_factor
-      
-      lines( c( x_source , x_target ) , c( y_source , y_target ), col = contact_color, lwd = 0.8 )
-      
-      if( y_profile[i] == max( y_profile ) ){
-        
-        text( x_target + 2*w, y_target , labels = format( y_profile[i], nsmall = 2 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-      }
-    }
-  } else { 
-    pos_profile_gap <- 1.1
-    ## diagonal profiles
-    
-    off_diagonals <- get_diagonals( A, 3 )
-    
-    max <-  max( abs( min( off_diagonals )),
-                 abs( max( off_diagonals )) )
-    max <- max / 30
-    
-    off_diagonals_positive <- off_diagonals ; off_diagonals_positive[ off_diagonals_positive < 0 ] <- 0
-    off_diagonals_negative <- off_diagonals ; off_diagonals_negative[ off_diagonals_negative > 0 ] <- 0
-    
-    means_positive  <- apply(  off_diagonals_positive, 1, mean ) #; means_positive <- c( means_positive, 0 )
-    means_negative  <- apply( -off_diagonals_negative, 1, mean ) #; means_negative <- c( means_negative, 0 )
-    
-    means_positive  <- smooth.spline( means_positive, spar = 0.3 )$y
-    check_if_uniq   <- suppressWarnings( unique(means_positive) )
-    
-    if( check_if_uniq != 0 ){means_positive <- means_positive / max}
-    
-    means_negative  <- smooth.spline( means_negative, spar = 0.3 )$y
-    check_if_uniq   <- suppressWarnings( unique(means_negative) )
-    
-    if( check_if_uniq != 0 ){means_negative <- means_negative / max}
-    
-    
-    profile_scale_factor <- 0.5
-    
-    
-    for ( k in 1:I ){
-      for (j in k:J ){
-        
-        if( length(unique(means_positive)) > 1 ){
-          
-          x_source <-       (k-0.2)*w - pos_profile_gap
-          y_source <- top - (k-0.2)*w - pos_profile_gap
-          
-          x_target <- x_source - means_positive[k] * profile_scale_factor
-          y_target <- y_source - means_positive[k] * profile_scale_factor
-          
-          lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_pos, lwd = 0.8 )
-          
-          if( means_positive[k] == max( means_positive ) ){
-            text( x_target - 2*w, y_target - 2*w, labels = format(means_positive[k], nsmall = 3), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-          }
-          
-        }
-        
-        if( length(unique(means_negative)) > 1 ){
-          
-          x_source <-       (k-0.8)*w - pos_profile_gap
-          y_source <- top - (k-0.8)*w - pos_profile_gap
-          
-          x_target <- x_source - means_negative[k] * profile_scale_factor
-          y_target <- y_source - means_negative[k] * profile_scale_factor
-          
-          lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_neg, lwd = 0.8 )
-          
-          if( means_negative[k] == max( means_negative ) ){
-            text( x_target - 2*w, y_target - 2*w, labels = format(means_negative[k], nsmall = 3), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-          }
-          
-        }
-        
-      }
-    }
-    
-    pos_profile_gap       <- 0.25
-    
-    
-    A_pos <- zero_diag( A , 2)
-    A_pos[ A_pos < 0 ] <- 0
-    
-    A_neg <- zero_diag( A , 2)
-    A_neg[ A_neg > 0 ] <- 0
-    
-    ## x-axis profiles
-    
-    x_profile_pos <- apply( A_pos, 2, mean )
-    x_profile_pos <- smooth.spline(x_profile_pos, spar = 0.3)$y
-    
-    check_if_uniq <- suppressWarnings( unique(x_profile_pos) )
-    
-    if( check_if_uniq != 0 ){x_profile_pos <- x_profile_pos /  max( x_profile_pos ) }
-    
-    x_profile_neg <- apply( -A_neg, 2, mean )
-    x_profile_neg <- smooth.spline(x_profile_neg, spar = 0.3)$y
-    
-    check_if_uniq <- suppressWarnings( unique(x_profile_neg) )
-    
-    if( check_if_uniq != 0 ){x_profile_neg <- x_profile_neg / max( x_profile_neg ) }
-    
-    for( j in 3:J ){
-      
-      if( length(unique(x_profile_pos)) > 1 ){
-        x_source <-       (j-0.2)*w
-        y_source <- top + pos_profile_gap
-        
-        x_target <- x_source
-        y_target <- y_source + x_profile_pos[(j-2)] #* (profile_scale_factor*0.5)
-        
-        lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_pos, lwd = 0.8 )
-        
-        if( x_profile_pos[(j-2)] == max( x_profile_pos ) ){
-          text( x_target, y_target + 2*w, labels = format( x_profile_pos[(j-2)], nsmall = 3 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-        }
-      }
-      
-      if( length(unique(x_profile_neg)) > 1 ){
-        x_source <-       (j-0.8)*w
-        y_source <- top + pos_profile_gap
-        
-        x_target <- x_source
-        y_target <- y_source + abs(x_profile_neg[(j-2)]) #* (profile_scale_factor*0.5)
-        
-        lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_neg, lwd = 0.8 )
-        
-        if( x_profile_neg[(j-2)] == max( x_profile_neg ) ){
-          text( x_target, y_target + 2*w, labels = format( x_profile_neg[(j-2)], nsmall = 3 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-        }
-      }
-    }
-    
-    
-    ## y-axis profiles
-    
-    y_profile_pos <- apply( A_pos, 1, mean )
-    y_profile_pos <- smooth.spline(y_profile_pos, spar = 0.3)$y
-    
-    check_if_uniq <- suppressWarnings( unique(y_profile_pos) )
-    
-    if( check_if_uniq != 0 ){y_profile_pos <- y_profile_pos /   max( y_profile_pos ) }
-    
-    y_profile_neg <- apply( -A_neg, 1, mean )
-    y_profile_neg <- smooth.spline(y_profile_neg, spar = 0.3)$y
-    
-    check_if_uniq <- suppressWarnings( unique(y_profile_neg) )
-    
-    if( check_if_uniq != 0 ){y_profile_neg <- y_profile_neg /  max( y_profile_neg ) }
-    
-    for( i in 1:(I-3) ){
-      
-      if( length(unique(y_profile_pos)) > 1 ){
-        
-        x_source <- I*w   +  pos_profile_gap
-        y_source <- top   -  (i-0.2)*w
-        
-        x_target <- x_source + y_profile_pos[i] #* (profile_scale_factor*0.5)
-        y_target <- y_source
-        
-        lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_pos, lwd = 0.8 )
-        
-        if( y_profile_pos[i] == max( y_profile_pos ) ){
-          text( x_target, y_target + 2*w, labels = format( y_profile_pos[i], nsmall = 3 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-        }
-      }
-      
-      if( length(unique(y_profile_neg)) > 1 ){
-        
-        x_source <- I*w   +  pos_profile_gap
-        y_source <- top   -  (i-0.8)*w
-        
-        x_target <- x_source + abs(y_profile_neg[i]) #* (profile_scale_factor*0.5)
-        y_target <- y_source
-        
-        lines( c( x_source , x_target ) , c( y_source , y_target ), col = color_neg, lwd = 0.8 )
-        
-        if( y_profile_neg[i] == max( y_profile_neg ) ){
-          text( x_target, y_target + 2*w, labels = format( y_profile_neg[i], nsmall = 3 ), cex = 0.2, col = "#888888", pos = 4, offset = 0 )
-        }
-      }
-    }
-  }
-}
 
 #################################################################
 ##                          Inter-Chr                          ##
@@ -776,7 +531,7 @@ draw_feature_inter <- function(
   end <- calculate_position(clipped_end)
   
   x_adjustment <- 2 * (plot_height / 100)
-  y_adjustment <- 2 * (plot_height / 100)
+  y_adjustment <- 4 * (plot_height / 100)
   
   if (axis == "x") {
     y_position <- top - depth  # Adjust y-position based on depth for x-axis
@@ -832,7 +587,7 @@ draw_bed_inter <- function(
     cat("bed file not found\n")
     stop()
   }
-
+  
   bed <- read.table(bed_file, as.is = TRUE, header = FALSE)
   
   # Assign column names based on the number of columns
@@ -849,7 +604,6 @@ draw_bed_inter <- function(
     # Check if there's a fourth column for text
     if (ncol(bed) == 3 && flag_text) {
       flag_text <- FALSE
-      cat("bed file warning: no additional columns to print as text\n")
     }
     
     # Separate beds for each axis
@@ -907,58 +661,47 @@ draw_bed_inter <- function(
   }
 }
 
-draw_contacts_inter <- function(
-    A, 
-    C, 
-    left_side, 
-    bedpe,
-    plot_width,
-    plot_height,
-    top) {  
+
+draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height, top) {
+
+  n_rows <- nrow(A)
+  n_cols <- ncol(A)
+  cell_width  <- plot_width / n_cols
+  cell_height <- plot_height / n_rows
   
-  # Draw the contact matrix
-  for (i in 1:nrow(A)) {
-    for (j in 1:ncol(A))  {
-      color <- rownames(C[order(abs(C[,"breaks"] - A[i,j]), decreasing = FALSE),])[1]
+  for (i in 1:n_rows) {
+    for (j in 1:n_cols) {
+      color <- rownames(C[order(abs(C[,"breaks"] - A[i, j]), decreasing = FALSE), ])[1]
       rect(
-        left_side + (j-1)*plot_width/ncol(A), top - (i-1)*plot_height/nrow(A),
-        left_side + j*plot_width/ncol(A), top - i*plot_height/nrow(A),
-        col = color, border = NA)
+        left_side + (j - 1) * cell_width, 
+        top - (i - 1) * cell_height,
+        left_side + j * cell_width, 
+        top - i * cell_height,
+        col = color, 
+        border = NA
+      )
     }
   }
   
+  # Draw BEDPE highlights
   if (bedpe != "FALSE") {
-    bedpe_coordinates <- data.frame(
-      x1 = numeric(nrow(pairs)), y1 = numeric(nrow(pairs)),
-      x2 = numeric(nrow(pairs)), y2 = numeric(nrow(pairs))
-    )
-    
-    for (i in 1:nrow(pairs)) {
-      bedpe_coordinates$x1[i] <- which(as.character(pairs$start1_bin[i]) == colnames(A))
-      bedpe_coordinates$y1[i] <- which(as.character(pairs$start2_bin[i]) == rownames(A))
-      bedpe_coordinates$x2[i] <- which(as.character(pairs$end1_bin[i]) == colnames(A))
-      bedpe_coordinates$y2[i] <- which(as.character(pairs$end2_bin[i]) == rownames(A))
-    }
-    
-    # Draw bedpe highlights
-    for (i in 1:nrow(bedpe_coordinates)) {
-
-      x1 <- bedpe_coordinates$x1[i] - 1 # - 1 to match contact plot bin indices
-      y1 <- bedpe_coordinates$y1[i] - 1
-      x2 <- bedpe_coordinates$x2[i] - 1
-      y2 <- bedpe_coordinates$y2[i] - 1
+    for (p in seq_len(nrow(pairs))) {
+      x1 <- left_side + (pairs$i[p] - 1) * cell_width
+      y1 <- top - (pairs$j[p] - 1) * cell_height
+      x2 <- left_side + (pairs$i_end[p]) * cell_width
+      y2 <- top - (pairs$j_end[p]) * cell_height
       
-      if (length(x1) > 0 && length(y1) > 0 && length(x2) > 0 && length(y2) > 0) {
-        rect(
-          left_side + (x1) * plot_width/ncol(A), 
-          top - (y1) * plot_height/nrow(A),
-          left_side + x2 * plot_width/ncol(A), 
-          top - y2 * plot_height/nrow(A),
-          border = bedpe_color, col = NA, lwd = 1)
-      }
+      # Draw the rectangle highlighting the BEDPE region
+      rect(
+        x1, y1, x2, y2,
+        border = bedpe_color, 
+        col = NA,
+        lwd = 1
+      )
     }
   }
 }
+
 
 
 draw_title_inter <- function(
@@ -998,107 +741,6 @@ draw_title_inter <- function(
   # Draw the title
   text(-2, top + 2, labels = title, col = "#888888", pos = 4, cex = 0.8)
 }
-
-draw_profiles_inter <- function( ) {
-  
-  # Profiles along the x-axis
-  x_profile <- apply(A, 2, mean) # Average contacts for each column (x-axis)
-  x_profile <- x_profile / max(x_profile) # Normalization
-  
-  for (j in 1:ncol(A)) {
-    x_source <- (j-0.5)*w
-    y_source <- top + 0.5 # Gap above the top of the plot
-    x_target <- x_source
-    y_target <- y_source + x_profile[j]
-    
-    lines(c(x_source, x_target), c(y_source, y_target), col = contact_color, lwd = 0.8)
-  }
-  
-  # Profiles along the y-axis
-  y_profile <- apply(A, 1, mean) # Average contacts for each row (y-axis)
-  y_profile <- y_profile / max(y_profile) # Normalization
-  
-  for (i in 1:nrow(A)) {
-    x_source <- -0.5 # Gap to the left of the plot
-    y_source <- top - (i-0.5)*w
-    x_target <- x_source - y_profile[i]
-    y_target <- y_source
-    
-    lines(c(x_source, x_target), c(y_source, y_target), col = contact_color, lwd = 0.8)
-  }
-}
-
-draw_profiles_inter_two_sample <- function() {
-  # Normalize and smooth the profiles for both positive and negative parts
-  normalize_and_smooth <- function(profile) {
-    profile_pos <- pmax(profile, 0)
-    profile_neg <- pmax(-profile, 0)
-    
-    if (max(profile_pos) == 0) {
-      profile_pos_smoothed <- rep(0, length(profile_pos))
-    } else {
-      profile_pos_smoothed <- smooth.spline(profile_pos / max(profile_pos), spar = 0.3)$y
-    }
-    
-    if (max(profile_neg) == 0) {
-      profile_neg_smoothed <- rep(0, length(profile_neg))
-    } else {
-      profile_neg_smoothed <- smooth.spline(profile_neg / max(profile_neg), spar = 0.3)$y
-    }
-    
-    list(positive = profile_pos_smoothed, negative = profile_neg_smoothed)
-  }
-  
-  bar_width <- 0.1 * w  # Width of each bar
-  bar_gap <- 0.05 * w   # Additional gap between bars
-  
-  # Profiles along the x-axis
-  x_profile <- apply(A, 2, mean)
-  x_profile_smoothed <- normalize_and_smooth(x_profile)
-  
-  for (j in 1:ncol(A)) {
-    x_source_center <- (j-0.5)*w  # Center of the bin
-    
-    # Calculate positions for positive and negative bars
-    x_source_pos <- x_source_center - bar_width / 2 - bar_gap / 2
-    x_source_neg <- x_source_center + bar_width / 2 + bar_gap / 2
-    
-    y_source_pos <- top + 0.5  # Position above the top of the plot for positive
-    y_source_neg <- top + 0.5  # Same position for negative, but different x_source
-    
-    # Positive profile
-    x_target_pos <- x_source_pos
-    y_target_pos <- y_source_pos + x_profile_smoothed$positive[j]
-    lines(c(x_source_pos, x_target_pos), c(y_source_pos, y_target_pos), col = color_pos, lwd = 0.8)
-    
-    # Negative profile
-    x_target_neg <- x_source_neg
-    y_target_neg <- y_source_neg + x_profile_smoothed$negative[j]
-    lines(c(x_source_neg, x_target_neg), c(y_source_neg, y_target_neg), col = color_neg, lwd = 0.8)
-  }
-  
-  # Profiles along the y-axis
-  y_profile <- apply(A, 1, mean)
-  y_profile_smoothed <- normalize_and_smooth(y_profile)
-  
-  for (i in 1:nrow(A)) {
-    y_source_center <- top - (i-0.5)*w  # Center of the bin
-    
-    # Base position to the left of the plot, same for both positive and negative
-    x_source_base <- -0.5
-    
-    # Calculate positions for positive and negative bars
-    x_target_pos <- x_source_base - y_profile_smoothed$positive[i]  # Position for positive bar
-    x_target_neg <- x_source_base - y_profile_smoothed$negative[i]  # Position for negative bar
-    
-    # Positive profile
-    lines(c(x_source_base, x_target_pos), c(y_source_center, y_source_center), col = color_pos, lwd = 0.8)
-    
-    # Negative profile
-    lines(c(x_source_base, x_target_neg), c(y_source_center + 3*bar_gap, y_source_center + 3*bar_gap), col = color_neg, lwd = 0.8)
-  }
-}
-
 
 
 underplot_message <- "\n\nParameters provided may generate poor visualization.\nConsider increasing interval range or decreasing resolution\nfor improved visualization.\n\n"
@@ -1151,16 +793,11 @@ if(flag_inter == "FALSE"){
     inh_col_on         <- sprintf( "#%s", Args[31] )
     inh_col_ceil       <- sprintf( "#%s", Args[32] )
     flag_matrix        <- Args[33]
-
+    
     interval_len <- interval_end - interval_start
     
     if( any( grepl( "chr", interval_chr, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
-    }
-    
-    if (max_cap != "none" && quant_cut != 1) {
-      cat("\nPlease provide either max_cap or quant_cut, not both!\n")
       quit(save="no")
     }
     
@@ -1176,10 +813,10 @@ if(flag_inter == "FALSE"){
         # subset pairs to interval length
         pairs <- pairs[ pairs[, "chr1"] == interval_chr, ]
         pairs <- pairs[ 
-          pairs[,"end2"] < interval_end & 
-            pairs[,"start1"] > interval_start & 
-            pairs[,"end1"] < interval_end & 
-            pairs[,"start2"] > interval_start, ]
+          pairs[,"end2"] <= interval_end & 
+            pairs[,"start1"] >= interval_start & 
+            pairs[,"end1"] <= interval_end & 
+            pairs[,"start2"] >= interval_start, ]
         
         if (nrow(pairs) == 0) {
           cat("\nThere are no bedpe pairs in the specified range. Continuing...\n")
@@ -1189,9 +826,9 @@ if(flag_inter == "FALSE"){
           
           # convert coordinates to bins
           pairs$start1_bin <- as.integer( floor(   pairs$start1 / bin_size ) * bin_size )
-          pairs$end1_bin   <- as.integer( ceiling( pairs$end1   / bin_size ) * bin_size )
+          pairs$end1_bin   <- as.integer( floor( pairs$end1   / bin_size ) * bin_size )
           pairs$start2_bin <- as.integer( floor(   pairs$start2 / bin_size ) * bin_size )
-          pairs$end2_bin   <- as.integer( ceiling( pairs$end2   / bin_size ) * bin_size )
+          pairs$end2_bin   <- as.integer( floor( pairs$end2   / bin_size ) * bin_size )
           
           
           for( i in 1:nrow(pairs) ){
@@ -1206,17 +843,16 @@ if(flag_inter == "FALSE"){
               pairs[i,"end2_bin"  ] <- b
             }
             
-            if( pairs[i,"end1_bin"] == pairs[i,"start1_bin"] ){
-              pairs[i,"end1_bin"] <- pairs[i,"end1_bin"] + bin_size
-            }
-            if( pairs[i,"end2_bin"] == pairs[i,"start2_bin"] ){
-              pairs[i,"end2_bin"] <- pairs[i,"end2_bin"] + bin_size
-            }
-            
             if( pairs[i,"chr1"] != pairs[i,"chr2"] ){
               cat("Please provide intra-chromosomal bedpes\n") ; quit(save="no")
             }
           }
+          
+          # Calculate plotting coordinates and add 1 for 1-based indexing
+          pairs$i <- (pairs$start1_bin - interval_start) / bin_size + 1 
+          pairs$j <- (pairs$start2_bin - interval_start) / bin_size + 1
+          pairs$i_end <- (pairs$end1_bin - interval_start) / bin_size + 1
+          pairs$j_end <- (pairs$end2_bin - interval_start) / bin_size + 1
         }
       }
     }
@@ -1249,11 +885,6 @@ if(flag_inter == "FALSE"){
     total1       <- sum( hg_total1 , mm_total1 )
     norm_factor1 <- 1000000 / total1
     aqua_factor1 <- hg_total1 / mm_total1
-    
-    if( ! flag_norm %in% c( "blank", "none", "cpm", "aqua" ) ){
-      cat("Norm should strictly be none, cpm or aqua in lower case \n")
-      q( save = "no" )
-    }
     
     # set normalization factor for spike-in and non-spike-in data.
     # non-spike-in data defaults to cpm.
@@ -1312,37 +943,37 @@ if(flag_inter == "FALSE"){
       paste( new_interval_chr, interval_start, interval_end, sep = ":"  ),
       unit,
       bin_size )
-
+    
     if( nrow(sparMat1) == 0 ){
       cat("\n No contact values found for this interval\n")
       quit()
     }
-
+    
     
     if(isFALSE(inherent)){
-
+      
       sparMat1$counts <- sparMat1$counts * norm_factor1 * aqua_factor1
-
+      
       denMat1 <- matrix(
-          data = 0,
-          nrow = length(seq(interval_start, interval_end, bin_size)),
-          ncol = length(seq(interval_start, interval_end, bin_size))
+        data = 0,
+        nrow = length(seq(interval_start, interval_end, bin_size)),
+        ncol = length(seq(interval_start, interval_end, bin_size))
       )
-
+      
       rownames(denMat1) <- seq(interval_start, interval_end, bin_size)
       colnames(denMat1) <- seq(interval_start, interval_end, bin_size)
-
+      
       # Populate denMat1
       for (i in 1:nrow(sparMat1)) {
-          x_index <- as.character(sparMat1[i, "x"])
-          y_index <- as.character(sparMat1[i, "y"])
-            
-          if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
-              denMat1[x_index, y_index] <- sparMat1[i, "counts"]
-          }
+        x_index <- as.character(sparMat1[i, "x"])
+        y_index <- as.character(sparMat1[i, "y"])
+        
+        if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
+          denMat1[x_index, y_index] <- sparMat1[i, "counts"]
+        }
       }
       
-
+      
       if( ncol(denMat1) >= 5){
         
         off_diagonal_max <- max( zero_diag( denMat1 , 4 ) )
@@ -1352,8 +983,8 @@ if(flag_inter == "FALSE"){
         
         denMat1 <- denMat1
       }
-
-
+      
+      
       if(flag_matrix){ 
         sample_name <- basename(sample_dir)
         out_file <- paste0(sample_name, "_matrix.txt")
@@ -1385,8 +1016,6 @@ if(flag_inter == "FALSE"){
       
       
       A <- denMat1max
-      I <- nrow( A )
-      J <- ncol( A )
       
       ## Plot:
       
@@ -1408,16 +1037,15 @@ if(flag_inter == "FALSE"){
       
       
       if(flag_w == "blank"){
-        w  <- calculate_w(100, 100, c(interval_start, interval_end), 
-                          bin_size)
+        w  <- calculate_w(100, 140, A)
       }
       
       if (flag_w != "blank"){
         w <- as.numeric(flag_w)
-        max_w <- calculate_w(100, 100, c(interval_start, interval_end), 
-                             bin_size)
+        max_w <- calculate_w(100, 140, A)
         if (w > max_w){
           cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
+          w <- max_w
         }
       }
       
@@ -1442,80 +1070,83 @@ if(flag_inter == "FALSE"){
       no_cus_ann <- FALSE
       
       if(isFALSE(flag_profiles)){
-        if( ann_default ){
-          
-          if( genome_build == "hg19" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/TSS.3000.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            legend(-2, 125, legend="transcription start sites", col = "#ef0000", lwd = 1, 
-                   box.lty = 0, cex =0.8, text.col ="#888888")
+        # Initialize legend elements
+        legend_labels <- c()
+        legend_colors <- c()
+        
+        # Default Annotation (TSS)
+        if (ann_default) {
+          if (genome_build == "hg19") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "mm10" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "" )
-            
-            print(bed_tss)
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            legend(-2, 125, legend="transcription start sites", col = "#ef0000", lwd = 1, 
-                   box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "mm10") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "hg38" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            
-            legend(-2, 125, legend="transcription start sites", 
-                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "hg38") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
         } else {
           no_def_ann <- TRUE
         }
         
-        if(ann_custom != "NONE") {
-          # Split the annotation files string into vector
+        # Custom Annotations
+        if (ann_custom != "NONE") {
+          # Split the annotation files string into a vector
           annotation_files <- unlist(strsplit(ann_custom, " "))
           
-          # Define different colors and values for each file
-          default_colors <- c("#00829d", "#8622b7")  # First and second file colors
-          track_depths <- c(1.5, 2.0)  # Different depths for first and second file
+          # Define default colors and track depths
+          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
+          track_depths <- c(6, 6.25, 6.5, 6.75)
           
-          # Process each annotation file separately
-          for(i in seq_along(annotation_files)) {
-              current_file <- annotation_files[i]
-              
-              if(ann_custom_colors == "NONE") {
-                  cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                  draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  
-              } else if(ann_custom_colors != "NONE") {
-                  # Split the colors string into vector if colors were provided
-                  colors <- unlist(strsplit(ann_custom_colors, " "))
-                  if(length(colors) >= i) {
-                      cat(sprintf("\nDrawing custom annotations for file %s\n", current_file))
-                      draw_bed(current_file, sprintf("#%s", colors[i]), track_depths[i], FALSE)
-                  } else {
-                      # Fall back to default color if not enough colors provided
-                      cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                      draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  }
-              }
+          # Split provided custom colors if provided
+          if (ann_custom_colors != "NONE") {
+            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
+            # Add a '#' if not present
+            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
           }
           
+          for (i in seq_along(annotation_files)) {
+            current_file <- annotation_files[i]
+            
+            # Decide which color to use
+            if (ann_custom_colors == "NONE") {
+              this_color <- default_colors[i %% length(default_colors) + 1]
+              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+            } else {
+              if (length(custom_colors) >= i) {
+                this_color <- custom_colors[i]
+              } else {
+                this_color <- default_colors[i %% length(default_colors) + 1]
+              }
+              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+            }
+            
+            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
+            
+            # Update legend
+            legend_labels <- c(legend_labels, basename(current_file))
+            legend_colors <- c(legend_colors, this_color)
+          }
         } else {
-            no_cus_ann <- TRUE
+          no_cus_ann <- TRUE
+        }
+        
+        # Draw legend
+        if (length(legend_labels) > 0) {
+          legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
+                 box.lty = 0, cex = 0.8, text.col = "#888888")
         }
       }
       
@@ -1537,22 +1168,22 @@ if(flag_inter == "FALSE"){
       cat(sprintf("   inh_col_ceil:  %s\n", inh_col_ceil  ))
       
       denMat1 <- matrix(
-          data = 0,
-          nrow = length(seq(interval_start, interval_end, bin_size)),
-          ncol = length(seq(interval_start, interval_end, bin_size))
+        data = 0,
+        nrow = length(seq(interval_start, interval_end, bin_size)),
+        ncol = length(seq(interval_start, interval_end, bin_size))
       )
-
+      
       rownames(denMat1) <- seq(interval_start, interval_end, bin_size)
       colnames(denMat1) <- seq(interval_start, interval_end, bin_size)
-
+      
       # Populate denMat1
       for (i in 1:nrow(sparMat1)) {
-          x_index <- as.character(sparMat1[i, "x"])
-          y_index <- as.character(sparMat1[i, "y"])
-            
-          if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
-              denMat1[x_index, y_index] <- sparMat1[i, "counts"]
-          }
+        x_index <- as.character(sparMat1[i, "x"])
+        y_index <- as.character(sparMat1[i, "y"])
+        
+        if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
+          denMat1[x_index, y_index] <- sparMat1[i, "counts"]
+        }
       }
       
       power_law_path <- list.files(
@@ -1631,15 +1262,11 @@ if(flag_inter == "FALSE"){
         quit(save = "no")
       }
       
-      I <- nrow( A )
-      J <- ncol( A )
-      
-      # Max_cap
       if( max_cap != "none" ){
-        cat("\n\nParameter --max_cap is not applicable when inherent = TRUE.\nContinuing without --max_cap...\n\n")
+        cat("\nParameter --max_cap is not applicable when inherent = TRUE\nContinuing without --max_cap...\n\n")
       }
       if( quant_cut != 1 ){
-        cat("\n\nParameter --quant_cut is not applicable when inherent = TRUE.\nContinuing without --quant_cut...\n\n")
+        cat("\nParameter --quant_cut is not applicable when inherent = TRUE\nContinuing without --quant_cut...\n\n")
       }
       
       ## Plot:
@@ -1654,23 +1281,23 @@ if(flag_inter == "FALSE"){
       par(bg  = "#eeeeee")
       
       plot( NULL,
-            xlim = c(-10,100), ylim = c(1,140),
+            xlim = c(0,100), ylim = c(0,140),
             xlab = NA,       ylab = NA,
             xaxt = "n",      yaxt = "n",
             bty = "n",       asp = 1 )
       
       
       if(flag_w == "blank"){
-        w  <- calculate_w(100, 100, c(interval_start, interval_end), 
-                          bin_size)
+        w  <- calculate_w(100, 140, A)
       }
       
       if (flag_w != "blank"){
         w <- as.numeric(flag_w)
-        max_w <- calculate_w(100, 100, c(interval_start, interval_end), 
-                             bin_size)
+        max_w  <- calculate_w(100, 140, A)
+        
         if (w > max_w){
           cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
+          w <- max_w
         }
       }
       
@@ -1685,13 +1312,11 @@ if(flag_inter == "FALSE"){
       colors_n       <- 10
       colors_0_1     <- colorRampPalette(c(inh_col_off , inh_col_on  ))( colors_n )
       colors_1_2     <- colorRampPalette(c(inh_col_on  , inh_col_ceil))( colors_n )
-      #colors_2_3     <- colorRampPalette(c(inh_col_ceil, inh_col_ceil))( colors_n )
       colors         <- c( inh_col_floor, colors_0_1, colors_1_2 )
       
       breaks <- c(
         (1:colors_n)/colors_n,
         (1:colors_n)/colors_n+1 )
-      #(1:colors_n)/colors_n+2)
       breaks <- c( 0, breaks )
       
       
@@ -1713,78 +1338,83 @@ if(flag_inter == "FALSE"){
       no_cus_ann <- FALSE
       
       if(isFALSE(flag_profiles)){
-        if( ann_default ){
-          
-          if( genome_build == "hg19" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/TSS.3000.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            legend(-2, 125, legend="transcription start sites", col = "#ef0000", lwd = 1, 
-                   box.lty = 0, cex =0.8, text.col ="#888888")
+        # Initialize legend
+        legend_labels <- c()
+        legend_colors <- c()
+        
+        # Default Annotation (TSS)
+        if (ann_default) {
+          if (genome_build == "hg19") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "mm10" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            legend(-2, 125, legend="transcription start sites", col = "#ef0000", lwd = 1, 
-                   box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "mm10") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "hg38" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            
-            legend(-2, 125, legend="transcription start sites", 
-                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "hg38") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
         } else {
           no_def_ann <- TRUE
         }
-        
-        if(ann_custom != "NONE") {
-          # Split the annotation files string into vector
+      
+        # Custom Annotations
+        if (ann_custom != "NONE") {
+          # Split the annotation files string into a vector
           annotation_files <- unlist(strsplit(ann_custom, " "))
           
-          # Define different colors and values for each file
-          default_colors <- c("#00829d", "#8622b7")  # First and second file colors
-          track_depths <- c(1.5, 2.0)  # Different depths for first and second file
+          # Define default colors and track depths
+          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
+          track_depths <- c(6, 6.25, 6.5, 6.75)
           
-          # Process each annotation file separately
-          for(i in seq_along(annotation_files)) {
-              current_file <- annotation_files[i]
-              
-              if(ann_custom_colors == "NONE") {
-                  cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                  draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  
-              } else if(ann_custom_colors != "NONE") {
-                  # Split the colors string into vector if colors were provided
-                  colors <- unlist(strsplit(ann_custom_colors, " "))
-                  if(length(colors) >= i) {
-                      cat(sprintf("\nDrawing custom annotations for file %s\n", current_file))
-                      draw_bed(current_file, sprintf("#%s", colors[i]), track_depths[i], FALSE)
-                  } else {
-                      # Fall back to default color if not enough colors provided
-                      cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                      draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  }
-              }
+          # Split custom colors if provided
+          if (ann_custom_colors != "NONE") {
+            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
+            # Add a '#' if not present
+            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
           }
           
+          for (i in seq_along(annotation_files)) {
+            current_file <- annotation_files[i]
+            
+            # Decide which color to use
+            if (ann_custom_colors == "NONE") {
+              this_color <- default_colors[i %% length(default_colors) + 1]
+              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+            } else {
+              if (length(custom_colors) >= i) {
+                this_color <- custom_colors[i]
+              } else {
+                this_color <- default_colors[i %% length(default_colors) + 1]
+              }
+              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+            }
+            
+            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
+            
+            # Update legend
+            legend_labels <- c(legend_labels, basename(current_file))
+            legend_colors <- c(legend_colors, this_color)
+          }
         } else {
-            no_cus_ann <- TRUE
+          no_cus_ann <- TRUE
+        }
+        
+        # Draw legend
+        if (length(legend_labels) > 0) {
+          legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
+                 box.lty = 0, cex = 0.8, text.col = "#888888")
         }
       }
       
@@ -1798,7 +1428,6 @@ if(flag_inter == "FALSE"){
       
     }
   }
-  
 }
 
 ###########################################################################
@@ -1848,7 +1477,7 @@ if(flag_inter == "FALSE"){
     inh_col_on         <- sprintf( "#%s", Args[34] )
     inh_col_ceil       <- sprintf( "#%s", Args[35] )
     inherent           <- as.logical(Args[36])
-
+    
     interval_len <- interval_end - interval_start
     
     if( any( grepl( "chr", interval_chr, ignore.case = T ) ) == FALSE ){
@@ -1865,11 +1494,13 @@ if(flag_inter == "FALSE"){
         if( sum( grepl( "chr", pairs$chr1 ) ) == 0 ) { pairs$chr1 <- paste0( "chr", pairs$chr1 ) }
         if( sum( grepl( "chr", pairs$chr2 ) ) == 0 ) { pairs$chr2 <- paste0( "chr", pairs$chr2 ) }
         
-        pairs <- pairs[ pairs[,"chr1"] == interval_chr , ]
-        pairs <- pairs[ pairs[,"end2"]           < interval_end
-                        & pairs[,"start1"] > interval_start
-                        & pairs[, "end1"]  < interval_end
-                        & pairs[,"start2"] > interval_start, ]
+        # subset pairs to interval length
+        pairs <- pairs[ pairs[, "chr1"] == interval_chr, ]
+        pairs <- pairs[ 
+          pairs[,"end2"] <= interval_end & 
+            pairs[,"start1"] >= interval_start & 
+            pairs[,"end1"] <= interval_end & 
+            pairs[,"start2"] >= interval_start, ]
         
         if (nrow(pairs) == 0) {
           cat("\nThere are no bedpe pairs in the specified range. Continuing...\n")
@@ -1879,9 +1510,9 @@ if(flag_inter == "FALSE"){
           
           # convert coordinates to bins
           pairs$start1_bin <- as.integer( floor(   pairs$start1 / bin_size ) * bin_size )
-          pairs$end1_bin   <- as.integer( ceiling( pairs$end1   / bin_size ) * bin_size )
+          pairs$end1_bin   <- as.integer( floor( pairs$end1   / bin_size ) * bin_size )
           pairs$start2_bin <- as.integer( floor(   pairs$start2 / bin_size ) * bin_size )
-          pairs$end2_bin   <- as.integer( ceiling( pairs$end2   / bin_size ) * bin_size )
+          pairs$end2_bin   <- as.integer( floor( pairs$end2   / bin_size ) * bin_size )
           
           
           for( i in 1:nrow(pairs) ){
@@ -1896,17 +1527,17 @@ if(flag_inter == "FALSE"){
               pairs[i,"end2_bin"  ] <- b
             }
             
-            if( pairs[i,"end1_bin"] == pairs[i,"start1_bin"] ){
-              pairs[i,"end1_bin"] <- pairs[i,"end1_bin"] + bin_size
-            }
-            if( pairs[i,"end2_bin"] == pairs[i,"start2_bin"] ){
-              pairs[i,"end2_bin"] <- pairs[i,"end2_bin"] + bin_size
-            }
-            
             if( pairs[i,"chr1"] != pairs[i,"chr2"] ){
               cat("Please provide intra-chromosomal bedpes\n") ; quit(save="no")
             }
           }
+          
+          # Calculate plotting coordinates and add 1 for 1-based indexing
+          pairs$i <- (pairs$start1_bin - interval_start) / bin_size + 1 
+          pairs$j <- (pairs$start2_bin - interval_start) / bin_size + 1
+          pairs$i_end <- (pairs$end1_bin - interval_start) / bin_size + 1
+          pairs$j_end <- (pairs$end2_bin - interval_start) / bin_size + 1
+
         }
       }
     }
@@ -1967,11 +1598,6 @@ if(flag_inter == "FALSE"){
     total2       <- sum( hg_total2 , mm_total2 )
     norm_factor2 <- 1000000 / total2
     aqua_factor2 <- hg_total2 / mm_total2
-    
-    if( ! flag_norm %in% c("blank",  "none", "cpm", "aqua" ) ){
-      cat("Norm should strictly be none, cpm or aqua in lower case \n")
-      q( save = "no" )
-    }
     
     # set normalization factor for spike-in and non-spike-in data.
     # non-spike-in data defaults to cpm
@@ -2053,50 +1679,50 @@ if(flag_inter == "FALSE"){
       cat("\n No contact values found for this interval in sample B\n")
       quit()
     }
-
+    
     if(isFALSE(inherent)){
       
       sparMat1$counts <- sparMat1$counts * norm_factor1 * aqua_factor1
       sparMat2$counts <- sparMat2$counts * norm_factor2 * aqua_factor2
-
+      
       denMat1 <- matrix(
-          data = 0,
-          nrow = length(seq(interval_start, interval_end, bin_size)),
-          ncol = length(seq(interval_start, interval_end, bin_size))
+        data = 0,
+        nrow = length(seq(interval_start, interval_end, bin_size)),
+        ncol = length(seq(interval_start, interval_end, bin_size))
       )
-
+      
       rownames(denMat1) <- seq(interval_start, interval_end, bin_size)
       colnames(denMat1) <- seq(interval_start, interval_end, bin_size)
-
+      
       denMat2 <- matrix(
-          data = 0,
-          nrow = length(seq(interval_start, interval_end, bin_size)),
-          ncol = length(seq(interval_start, interval_end, bin_size))
+        data = 0,
+        nrow = length(seq(interval_start, interval_end, bin_size)),
+        ncol = length(seq(interval_start, interval_end, bin_size))
       )
-
+      
       rownames(denMat2) <- seq(interval_start, interval_end, bin_size)
       colnames(denMat2) <- seq(interval_start, interval_end, bin_size)
-
+      
       # Populate denMat1
       for (i in 1:nrow(sparMat1)) {
-          x_index <- as.character(sparMat1[i, "x"])
-          y_index <- as.character(sparMat1[i, "y"])
-            
-          if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
-              denMat1[x_index, y_index] <- sparMat1[i, "counts"]
-          }
+        x_index <- as.character(sparMat1[i, "x"])
+        y_index <- as.character(sparMat1[i, "y"])
+        
+        if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
+          denMat1[x_index, y_index] <- sparMat1[i, "counts"]
+        }
       }
-
+      
       # Populate denMat2
       for (i in 1:nrow(sparMat2)) {
-          x_index <- as.character(sparMat2[i, "x"])
-          y_index <- as.character(sparMat2[i, "y"])
-            
-          if (x_index %in% rownames(denMat2) && y_index %in% colnames(denMat2)) {
-              denMat2[x_index, y_index] <- sparMat2[i, "counts"]
-          }
+        x_index <- as.character(sparMat2[i, "x"])
+        y_index <- as.character(sparMat2[i, "y"])
+        
+        if (x_index %in% rownames(denMat2) && y_index %in% colnames(denMat2)) {
+          denMat2[x_index, y_index] <- sparMat2[i, "counts"]
+        }
       }
-
+      
       
       if (nrow(denMat1) != nrow(denMat2)) {
         intersect <- intersect(rownames(denMat1),rownames(denMat2))
@@ -2113,11 +1739,6 @@ if(flag_inter == "FALSE"){
         write.table(denDelta, file = out_file, row.names = FALSE, col.names = FALSE)
         cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
         quit(save = "no")
-      }
-      
-      if( max_cap != "none" && quant_cut != 1 ){
-        cat("\n Please provide either max_cap or quant_cut, not both!\n")
-        quit()
       }
       
       # Max_cap and quant_cut handling
@@ -2151,8 +1772,6 @@ if(flag_inter == "FALSE"){
       
       
       A <- denDelta
-      I <- nrow( A )
-      J <- ncol( A )
       
       ## Plot:
       
@@ -2174,16 +1793,16 @@ if(flag_inter == "FALSE"){
       
       
       if(flag_w == "blank"){
-        w  <- calculate_w(100, 100, c(interval_start, interval_end), 
-                          bin_size)
+        w  <- calculate_w(100, 140, A)
       }
       
       if (flag_w != "blank"){
         w <- as.numeric(flag_w)
-        max_w <- calculate_w(100, 100, c(interval_start, interval_end), 
-                             bin_size)
+        max_w <- calculate_w(100, 140, A)
+        
         if (w > max_w){
           cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
+          w <- max_w
         }
       }
       
@@ -2210,75 +1829,83 @@ if(flag_inter == "FALSE"){
       no_cus_ann <- FALSE
       
       if(isFALSE(flag_profiles)){
-        if( ann_default ){
-          
-          if( genome_build == "hg19" ){
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/TSS.3000.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
+        # Initialize legend elements
+        legend_labels <- c()
+        legend_colors <- c()
+        
+        # Default Annotation (TSS)
+        if (ann_default) {
+          if (genome_build == "hg19") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "mm10" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            legend(-2, 125, legend="transcription start sites", col = "#ef0000", lwd = 1, 
-                   box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "mm10") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
-          if( genome_build == "hg38" ){
-            
-            cat( "\nDrawing default annotations\n" )
-            
-            bed_tss <- paste( data_dir,"/",genome_build,"/reference/GENCODE_TSSs_hg38.bed", sep = "" )
-            
-            draw_bed( bed_tss , "#ef0000", 0.5, TRUE  )
-            
-            legend(-2, 125, legend="transcription start sites", 
-                   col = "#ef0000", lwd = 1, box.lty = 0, cex =0.8, text.col ="#888888")
+          if (genome_build == "hg38") {
+            cat("\nDrawing default annotations\n")
+            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
+            draw_bed(bed_tss, "#ef0000", 7, TRUE)
+            legend_labels <- c(legend_labels, "transcription start sites")
+            legend_colors <- c(legend_colors, "#ef0000")
           }
-          
         } else {
           no_def_ann <- TRUE
         }
         
-        if(ann_custom != "NONE") {
-          # Split the annotation files string into vector
+        # Custom Annotations
+        if (ann_custom != "NONE") {
+          # Split the annotation files string into a vector
           annotation_files <- unlist(strsplit(ann_custom, " "))
           
-          # Define different colors and values for each file
-          default_colors <- c("#00829d", "#8622b7")  # First and second file colors
-          track_depths <- c(1.5, 2.0)  # Different depths for first and second file
+          # Define default colors and track depths
+          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
+          track_depths <- c(6, 6.25, 6.5, 6.75)
           
-          # Process each annotation file separately
-          for(i in seq_along(annotation_files)) {
-              current_file <- annotation_files[i]
-              
-              if(ann_custom_colors == "NONE") {
-                  cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                  draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  
-              } else if(ann_custom_colors != "NONE") {
-                  # Split the colors string into vector if colors were provided
-                  colors <- unlist(strsplit(ann_custom_colors, " "))
-                  if(length(colors) >= i) {
-                      cat(sprintf("\nDrawing custom annotations for file %s\n", current_file))
-                      draw_bed(current_file, sprintf("#%s", colors[i]), track_depths[i], FALSE)
-                  } else {
-                      # Fall back to default color if not enough colors provided
-                      cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                      draw_bed(current_file, default_colors[i], track_depths[i], FALSE)
-                  }
-              }
+          # If the user provided custom colors, split those as well
+          if (ann_custom_colors != "NONE") {
+            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
+            # Add a '#' if not present
+            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
           }
           
+          for (i in seq_along(annotation_files)) {
+            current_file <- annotation_files[i]
+            
+            # Decide which color to use
+            if (ann_custom_colors == "NONE") {
+              this_color <- default_colors[i %% length(default_colors) + 1]
+              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+            } else {
+              if (length(custom_colors) >= i) {
+                this_color <- custom_colors[i]
+              } else {
+                this_color <- default_colors[i %% length(default_colors) + 1]
+              }
+              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+            }
+            
+            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
+            
+            # Update legend
+            legend_labels <- c(legend_labels, basename(current_file))
+            legend_colors <- c(legend_colors, this_color)
+          }
         } else {
-            no_cus_ann <- TRUE
+          no_cus_ann <- TRUE
+        }
+        
+        # Draw legend
+        if (length(legend_labels) > 0) {
+          legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
+                 box.lty = 0, cex = 0.8, text.col = "#888888")
         }
       }
       
@@ -2351,14 +1978,14 @@ if(flag_inter == "TRUE"){
     interval_chr2 <- range_components[4]
     interval_start2 <- as.numeric(range_components[5])
     interval_end2 <- as.numeric(range_components[6])
-
+    
     interval_len1 <- interval_end1 - interval_start1
     interval_len2 <- interval_end2 - interval_start2
-
+    
     dimensions <- calculate_plot_dimensions(interval_start1, interval_end1, 
-                                        interval_start2, interval_end2, 
-                                        bin_size)
-
+                                            interval_start2, interval_end2, 
+                                            bin_size)
+    
     plot_width <- dimensions$width
     plot_height <- dimensions$height
     
@@ -2368,11 +1995,6 @@ if(flag_inter == "TRUE"){
     }
     if( any( grepl( "chr", interval_chr2, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
-    }
-    
-    if (max_cap != "none" && quant_cut != 1) {
-      cat("\nPlease provide either max_cap or quant_cut, not both!\n")
       quit(save="no")
     }
     
@@ -2390,7 +2012,7 @@ if(flag_inter == "TRUE"){
       new_interval_chr1 <- interval_chr1
       new_interval_chr2 <- interval_chr2
     }
-    
+
     if (flag_matrix == "FALSE") {
       if (bedpe != "FALSE") {
         pairs <- read.table(bedpe, as.is = TRUE, header = FALSE)[, 1:6]
@@ -2400,43 +2022,44 @@ if(flag_inter == "TRUE"){
         pairs$chr1 <- ifelse(grepl("chr", pairs$chr1), pairs$chr1, paste0("chr", pairs$chr1))
         pairs$chr2 <- ifelse(grepl("chr", pairs$chr2), pairs$chr2, paste0("chr", pairs$chr2))
         
-        # Filter the BEDPE pairs
+        # Filter the BEDPE pairs using the appropriate interval variables
         pairs <- pairs[
-          ((pairs$chr1 == new_interval_chr1 & pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
-              pairs$chr2 == new_interval_chr2 & pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
-             (pairs$chr1 == new_interval_chr2 & pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
-                pairs$chr2 == new_interval_chr1& pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
-          ), ]
+          (
+            (pairs$chr1 == new_interval_chr1 & pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
+               pairs$chr2 == new_interval_chr2 & pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
+              (pairs$chr1 == new_interval_chr2 & pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
+                 pairs$chr2 == new_interval_chr1 & pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
+          ), 
+        ]
         
         if (nrow(pairs) == 0) {
           cat("\nThere are no bedpe pairs in the specified range. Continuing...\n")
           bedpe <- "FALSE"
         } else {
-          # Reorder columns if feet are in swapped position
-          for (i in 1:nrow(pairs)) {
-            if (pairs[i, "chr1"] != new_interval_chr1) {
-              pairs[i, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <- 
-                pairs[i, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
+          # Reorder columns if intervals are swapped
+          for (idx in 1:nrow(pairs)) {
+            if (pairs[idx, "chr1"] != new_interval_chr1) {
+              pairs[idx, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <- 
+                pairs[idx, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
             }
           }
           
+          # Reset column names (if needed)
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
           
           # Convert coordinates to bins
-          pairs$start1_bin <- as.integer( floor(pairs$start1 / bin_size) * bin_size )
-          pairs$end1_bin   <- as.integer( ceiling(pairs$end1 / bin_size) * bin_size )
-          pairs$start2_bin <- as.integer( floor(pairs$start2 / bin_size) * bin_size )
-          pairs$end2_bin   <- as.integer( ceiling(pairs$end2 / bin_size) * bin_size )
+          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
+          pairs$end1_bin   <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
+          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
+          pairs$end2_bin   <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
           
-          # Apply adjustments to bin ranges
-          for (i in 1:nrow(pairs)) {
-            if (pairs[i, "end1_bin"] == pairs[i, "start1_bin"]) {
-              pairs[i, "end1_bin"] <- pairs[i, "end1_bin"] + bin_size
-            }
-            if (pairs[i, "end2_bin"] == pairs[i, "start2_bin"]) {
-              pairs[i, "end2_bin"] <- pairs[i, "end2_bin"] + bin_size
-            }
-          }
+          # Calculate plotting coordinates.
+          # Use interval_start1 for the first set and interval_start2 for the second set.
+          pairs$i <- (pairs$start1_bin - interval_start1) / bin_size + 1 
+          pairs$j <- (pairs$start2_bin - interval_start2) / bin_size + 1
+          pairs$i_end <- (pairs$end1_bin - interval_start1) / bin_size + 1
+          pairs$j_end <- (pairs$end2_bin - interval_start2) / bin_size + 1
+
         }
       }
     }
@@ -2453,11 +2076,6 @@ if(flag_inter == "TRUE"){
     total1       <- sum( hg_total1 , mm_total1 )
     norm_factor1 <- 1000000 / total1
     aqua_factor1 <- hg_total1 / mm_total1
-    
-    if( ! flag_norm %in% c( "blank", "none", "cpm", "aqua" ) ){
-      cat("Norm should strictly be none, cpm or aqua in lower case \n")
-      q( save = "no" )
-    }
     
     # set normalization factor for spike-in and non-spike-in data.
     # non-spike-in data defaults to cpm.
@@ -2529,10 +2147,10 @@ if(flag_inter == "TRUE"){
       nrow = length(seq(interval_start1, interval_end1, bin_size)),
       ncol = length(seq(interval_start2, interval_end2, bin_size))
     )
-
+    
     rownames(denMat1) <- seq(interval_start1, interval_end1, bin_size)
     colnames(denMat1) <- seq(interval_start2, interval_end2, bin_size)
-
+    
     # Populate denMat1
     for (i in 1:nrow(sparMat1)) {
       x_index <- as.character(sparMat1[i, "x"])
@@ -2542,7 +2160,7 @@ if(flag_inter == "TRUE"){
         denMat1[x_index, y_index] <- sparMat1[i, "counts"]
       }
     }
-
+    
     denMat1    <- t(denMat1)
     
     if(flag_matrix){ 
@@ -2574,9 +2192,7 @@ if(flag_inter == "TRUE"){
     C[,2] <- breakList
     
     A <- denMat1max
-    I <- nrow( A )
-    J <- ncol( A )
-    
+
     ## Plot:
     
     pdf(
@@ -2597,23 +2213,15 @@ if(flag_inter == "TRUE"){
     
     
     if(flag_w == "blank"){
-      
-      # Call calculate_w for each interval
-      w_interval1 <- calculate_w(plot_width, plot_height, c(interval_start1, interval_end1), bin_size)
-      w_interval2 <- calculate_w(plot_width, plot_height, c(interval_start2, interval_end2), bin_size)
-
-      
-      # Choose the smaller of the two
-      w <- min(w_interval1, w_interval2)
+      w <- calculate_w(plot_width, plot_height, A)
     }
     
     if (flag_w != "blank"){
       w <- as.numeric(flag_w)
-      w_interval1 <- calculate_w(plot_width, plot_height, c(interval_start1, interval_end1), bin_size)
-      w_interval2 <- calculate_w(plot_width, plot_height, c(interval_start2, interval_end2), bin_size)
-      max_w <- min(w_interval1, w_interval2)
+      max_w <- calculate_w(plot_width, plot_height, A)
       if (w > max_w){
         cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
+        w <- max_w
       }
     }
     
@@ -2622,7 +2230,7 @@ if(flag_inter == "TRUE"){
     if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
     
     cat(sprintf("plotting bin width: %s\n", round(w,3)))
-    top        <- 135
+    top        <- 140
     
     draw_title_inter(new_interval_chr1, interval_start1, interval_end1, new_interval_chr2, interval_start2, interval_end2)
     
@@ -2630,77 +2238,117 @@ if(flag_inter == "TRUE"){
     
     draw_scale( )
     
-    top <- top - 13
-
+    top <- top - 30
+    
     draw_contacts_inter(A, C, left_side = 0, bedpe, plot_width, plot_height, top)
     
-    if(isFALSE(flag_profiles)){
-      if(ann_default) {
-        if(genome_build == "hg19") {
+    if (isFALSE(flag_profiles)) {
+      # Initialize legend elements
+      legend_labels <- c()
+      legend_colors <- c()
+      
+      # Default Annotation (TSS)
+      if (ann_default) {
+        if (genome_build == "hg19") {
           cat("\nDrawing default annotations for hg19\n")
-          bed_tss <- paste(data_dir, "/", genome_build, "/reference/TSS.3000.bed", sep = "")
+          bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
           
-          # Draw annotations for chromosome on the x-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+          # Draw annotations for x- and y-axes
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
           
-          # Draw annotations for chromosome on the y-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
         }
-        
-        if(genome_build == "hg38") {
+        if (genome_build == "hg38") {
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-
-        # Draw annotations for chromosome on the x-axis
-            draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-            
-            # Draw annotations for chromosome on the y-axis
-            draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
-
+          
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
         }
+        if (genome_build == "mm10") {
+          cat("\nDrawing default annotations for mm10\n")
+          bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
+          
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
+        }
+      } else {
+        no_def_ann <- TRUE
       }
       
-      if(ann_custom != "NONE") {
-            # Split the annotation files string into vector
-            annotation_files <- unlist(strsplit(ann_custom, " "))
-            
-            # Define different colors and values for each file
-            default_colors <- c("#00829d", "#8622b7")
-            track_depths <- c(-0.5, -0.8)  # Different depths for first and second file
-            
-            # Process each annotation file separately
-            for(i in seq_along(annotation_files)) {
-                current_file <- annotation_files[i]
-                
-                if(ann_custom_colors == "NONE") {
-                    cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                    color <- default_colors[i]
-                } else {
-                    # Split the colors string into vector if colors were provided
-                    colors <- unlist(strsplit(ann_custom_colors, " "))
-                    if(length(colors) >= i) {
-                        cat(sprintf("\nDrawing custom annotations for file %s\n", current_file))
-                        color <- sprintf("#%s", colors[i])
-                    } else {
-                        cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                        color <- default_colors[i]
-                    }
-                }
-                
-                # Draw annotations for both x and y axes
-                draw_bed_inter(current_file, color, track_depths[i], FALSE, w, top, "x", 
-                            interval_start1, interval_len1, interval_start2, interval_len2, 
-                            plot_width, plot_height)
-                draw_bed_inter(current_file, color, track_depths[i], FALSE, w, top, "y",
-                            interval_start1, interval_len1, interval_start2, interval_len2, 
-                            plot_width, plot_height)
+      # Custom Annotations
+      if (ann_custom != "NONE") {
+        # Split the annotation files string into a vector
+        annotation_files <- unlist(strsplit(ann_custom, " "))
+        
+        # Define default colors and track depths
+        default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
+        track_depths <- c(-0.5, -0.8, -1.1, -1.4)
+        
+        for (i in seq_along(annotation_files)) {
+          current_file <- annotation_files[i]
+          
+          # Decide which color to use
+          if (ann_custom_colors == "NONE") {
+            # Use default color
+            this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
+            cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+          } else {
+            # Split the provided colors and make sure a '#' is included
+            colors <- unlist(strsplit(ann_custom_colors, " "))
+            if (length(colors) >= i) {
+              # Prepend '#' if necessary
+              this_color <- if (substr(colors[i], 1, 1) == "#") colors[i] else paste0("#", colors[i])
+            } else {
+              this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
             }
+            cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+          }
+          
+          # Draw annotations for both x and y axes
+          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "x",
+                         interval_start1, interval_len1, interval_start2, interval_len2,
+                         plot_width, plot_height)
+          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "y",
+                         interval_start1, interval_len1, interval_start2, interval_len2,
+                         plot_width, plot_height)
+          
+          # Update legend elements
+          legend_labels <- c(legend_labels, basename(current_file))
+          legend_colors <- c(legend_colors, this_color)
+        }
       } else {
-            no_cus_ann <- TRUE
+        no_cus_ann <- TRUE
+      }
+      
+      # Draw the legend
+      if (length(legend_labels) > 0) {
+        legend(-2, 127, legend = legend_labels, col = legend_colors, lwd = 1,
+               box.lty = 0, cex = 0.8, text.col = "#888888")
       }
     }
     
-    if( flag_profiles ){
+    if (flag_profiles) {
       draw_profiles_inter()
     }
     
@@ -2772,18 +2420,13 @@ if(flag_inter == "TRUE"){
       quit(save="no")
     }
     
-    if (max_cap != "none" && quant_cut != 1) {
-      cat("\nPlease provide either max_cap or quant_cut, not both!\n")
-      quit(save="no")
-    }
-    
     interval_len1 <- interval_end1 - interval_start1
     interval_len2 <- interval_end2 - interval_start2
-
+    
     dimensions <- calculate_plot_dimensions(interval_start1, interval_end1, 
-                                    interval_start2, interval_end2, 
-                                    bin_size)
-
+                                            interval_start2, interval_end2, 
+                                            bin_size)
+    
     plot_width <- dimensions$width
     plot_height <- dimensions$height
     
@@ -2807,18 +2450,19 @@ if(flag_inter == "TRUE"){
     
     
     if( flag_strip_chr == "yes" ){
-      interval_chr_A <- sub( "chr", "", interval_chr1 )
-      interval_chr_B <- sub( "chr", "", interval_chr2 )
+      new_interval_chr1 <- sub( "chr", "", interval_chr1 )
+      new_interval_chr2 <- sub( "chr", "", interval_chr2 )
     } else if( flag_strip_chr == "B" ){
-      interval_chr_A <- interval_chr1
-      interval_chr_B <- sub( "chr", "", interval_chr2 )
+      new_interval_chr1 <- interval_chr1
+      new_interval_chr2 <- sub( "chr", "", interval_chr2 )
     } else if( flag_strip_chr == "A" ){
-      interval_chr_A <- sub( "chr", "", interval_chr1 )
-      interval_chr_B <- interval_chr2
+      new_interval_chr1 <- sub( "chr", "", interval_chr1 )
+      new_interval_chr2 <- interval_chr2
     } else if( flag_strip_chr == "no" ){
-      interval_chr_A <- interval_chr1
-      interval_chr_B <- interval_chr2
+      new_interval_chr1 <- interval_chr1
+      new_interval_chr2 <- interval_chr2
     }
+    
     
     if (flag_matrix == "FALSE") {
       if (bedpe != "FALSE") {
@@ -2829,44 +2473,43 @@ if(flag_inter == "TRUE"){
         pairs$chr1 <- ifelse(grepl("chr", pairs$chr1), pairs$chr1, paste0("chr", pairs$chr1))
         pairs$chr2 <- ifelse(grepl("chr", pairs$chr2), pairs$chr2, paste0("chr", pairs$chr2))
         
-        # Filter the BEDPE pairs
+        # Filter the BEDPE pairs using the appropriate interval variables
         pairs <- pairs[
-          ((pairs$chr1 == interval_chr_A & pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
-              pairs$chr2 == interval_chr_B & pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
-             (pairs$chr1 == interval_chr_B & pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
-                pairs$chr2 == interval_chr_A & pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
-          ), ]
+          (
+            (pairs$chr1 == new_interval_chr1 & pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
+               pairs$chr2 == new_interval_chr2 & pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
+              (pairs$chr1 == new_interval_chr2 & pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
+                 pairs$chr2 == new_interval_chr1 & pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
+          ), 
+        ]
         
         if (nrow(pairs) == 0) {
           cat("\nThere are no bedpe pairs in the specified range. Continuing...\n")
           bedpe <- "FALSE"
         } else {
-          
-          # Reorder columns if feet are in swapped position
-          for (i in 1:nrow(pairs)) {
-            if (pairs[i, "chr1"] != interval_chr_A) {
-              pairs[i, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <- 
-                pairs[i, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
+          # Reorder columns if intervals are swapped
+          for (idx in 1:nrow(pairs)) {
+            if (pairs[idx, "chr1"] != new_interval_chr1) {
+              pairs[idx, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <- 
+                pairs[idx, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
             }
           }
           
+          # Reset column names
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
           
           # Convert coordinates to bins
-          pairs$start1_bin <- as.integer( floor(pairs$start1 / bin_size) * bin_size )
-          pairs$end1_bin   <- as.integer( ceiling(pairs$end1 / bin_size) * bin_size )
-          pairs$start2_bin <- as.integer( floor(pairs$start2 / bin_size) * bin_size )
-          pairs$end2_bin   <- as.integer( ceiling(pairs$end2 / bin_size) * bin_size )
+          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
+          pairs$end1_bin   <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
+          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
+          pairs$end2_bin   <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
           
-          # Apply adjustments to bin ranges
-          for (i in 1:nrow(pairs)) {
-            if (pairs[i, "end1_bin"] == pairs[i, "start1_bin"]) {
-              pairs[i, "end1_bin"] <- pairs[i, "end1_bin"] + bin_size
-            }
-            if (pairs[i, "end2_bin"] == pairs[i, "start2_bin"]) {
-              pairs[i, "end2_bin"] <- pairs[i, "end2_bin"] + bin_size
-            }
-          }
+          # Calculate plotting coordinates
+          pairs$i <- (pairs$start1_bin - interval_start1) / bin_size + 1 
+          pairs$j <- (pairs$start2_bin - interval_start2) / bin_size + 1
+          pairs$i_end <- (pairs$end1_bin - interval_start1) / bin_size + 1
+          pairs$j_end <- (pairs$end2_bin - interval_start2) / bin_size + 1
+
         }
       }
     }
@@ -2888,11 +2531,6 @@ if(flag_inter == "TRUE"){
     total2       <- sum( hg_total2 , mm_total2 )
     norm_factor2 <- 1000000 / total2
     aqua_factor2 <- hg_total2 / mm_total2
-    
-    if( ! flag_norm %in% c("blank",  "none", "cpm", "aqua" ) ){
-      cat("Norm should strictly be none, cpm or aqua in lower case \n")
-      q( save = "no" )
-    }
     
     # set normalization factor for spike-in and non-spike-in data.
     # non-spike-in data defaults to cpm
@@ -2946,16 +2584,16 @@ if(flag_inter == "TRUE"){
     cat(sprintf("       norm: %s\n", norm       ))
     cat(sprintf("      hic_A: %s\n", path_hic_A ))
     cat(sprintf("      hic_B: %s\n", path_hic_B ))
-    cat(sprintf("   interval: %s\n", paste( interval_chr_A, interval_start1, interval_end1, sep = ":"  ) ))
-    cat(sprintf("   interval: %s\n", paste( interval_chr_B, interval_start2, interval_end2, sep = ":"  ) ))
+    cat(sprintf("   interval: %s\n", paste( interval_chr1, interval_start1, interval_end1, sep = ":"  ) ))
+    cat(sprintf("   interval: %s\n", paste( interval_chr2, interval_start2, interval_end2, sep = ":"  ) ))
     cat(sprintf("       unit: %s\n", unit       ))
     cat(sprintf("   bin_size: %s\n", bin_size   ))
     
     
     sparMat1 <- straw( norm,
                        path_hic_A,
-                       paste( interval_chr_A, interval_start1, interval_end1, sep = ":"  ),
-                       paste( interval_chr_B, interval_start2, interval_end2, sep = ":"  ),
+                       paste( interval_chr1, interval_start1, interval_end1, sep = ":"  ),
+                       paste( interval_chr2, interval_start2, interval_end2, sep = ":"  ),
                        unit,
                        bin_size)
     
@@ -2966,8 +2604,8 @@ if(flag_inter == "TRUE"){
     
     sparMat2 <- straw( norm,
                        path_hic_B,
-                       paste( interval_chr_A, interval_start1, interval_end1, sep = ":"  ),
-                       paste( interval_chr_B, interval_start2, interval_end2, sep = ":"  ),
+                       paste( interval_chr1, interval_start1, interval_end1, sep = ":"  ),
+                       paste( interval_chr2, interval_start2, interval_end2, sep = ":"  ),
                        unit,
                        bin_size)
     
@@ -3068,8 +2706,6 @@ if(flag_inter == "TRUE"){
     
     
     A <- denDelta
-    I <- nrow( A )
-    J <- ncol( A )
     
     ## Plot:
     
@@ -3091,22 +2727,15 @@ if(flag_inter == "TRUE"){
     
     
     if(flag_w == "blank"){
-      
-      # Call calculate_w for each interval
-      w_interval1 <- calculate_w(100, 100, c(interval_start1, interval_end1), bin_size)
-      w_interval2 <- calculate_w(100, 100, c(interval_start2, interval_end2), bin_size)
-      
-      # Choose the smaller of the two
-      w <- min(w_interval1, w_interval2)
+      w <- calculate_w(plot_width, plot_height, A)
     }
     
     if (flag_w != "blank"){
       w <- as.numeric(flag_w)
-      w_interval1 <- calculate_w(100, 100, c(interval_start1, interval_end1), bin_size)
-      w_interval2 <- calculate_w(100, 100, c(interval_start2, interval_end2), bin_size)
-      max_w <- min(w_interval1, w_interval2)
+      max_w <- calculate_w(plot_width, plot_height, A)
       if (w > max_w){
         cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
+        w <- max_w
       }
     }
     
@@ -3115,87 +2744,126 @@ if(flag_inter == "TRUE"){
     if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
     
     cat(sprintf("plotting bin width: %s\n", round(w,3)))
-    top        <- 135
+    top        <- 140
     
-    draw_title_inter(interval_chr_A, interval_start1, interval_end1, interval_chr_B, interval_start2, interval_end2)
+    draw_title_inter(interval_chr1, interval_start1, interval_end1, interval_chr2, interval_start2, interval_end2)
     
     top <- top - 12
     
     draw_scale( )
     
-    top <- top - 13
-
+    top <- top - 30
+    
     draw_contacts_inter(A, C, left_side = 0, bedpe, plot_width, plot_height, top)
     
-    if(isFALSE(flag_profiles)){
-      if(ann_default) {
-        if(genome_build == "hg19") {
+    if (isFALSE(flag_profiles)) {
+      # Initialize legend elements
+      legend_labels <- c()
+      legend_colors <- c()
+      
+      # Default Annotation (TSS)
+      if (ann_default) {
+        if (genome_build == "hg19") {
           cat("\nDrawing default annotations for hg19\n")
-          bed_tss <- paste(data_dir, "/", genome_build, "/reference/TSS.3000.bed", sep = "")
+          bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
           
-          # Draw annotations for chromosome on the x-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+          # Draw annotations for x- and y-axes
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
           
-          # Draw annotations for chromosome on the y-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
         }
-        
-        if(genome_build == "hg38") {
+        if (genome_build == "hg38") {
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-
-          # Draw annotations for chromosome on the x-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
           
-          # Draw annotations for chromosome on the y-axis
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", interval_start1, interval_len1, interval_start2, interval_len2, plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
         }
+        if (genome_build == "mm10") {
+          cat("\nDrawing default annotations for mm10\n")
+          bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
+          
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+                         interval_start1, interval_len1, interval_start2, interval_len2, 
+                         plot_width, plot_height)
+          
+          legend_labels <- c(legend_labels, "transcription start sites")
+          legend_colors <- c(legend_colors, "#ef0000")
+        }
+      } else {
+        no_def_ann <- TRUE
       }
       
-      if(ann_custom != "NONE") {
-            # Split the annotation files string into vector
-            annotation_files <- unlist(strsplit(ann_custom, " "))
-            
-            # Define different colors and values for each file
-            default_colors <- c("#00829d", "#8622b7")
-            track_depths <- c(-0.5, -0.8)  # Different depths for first and second file
-            
-            # Process each annotation file separately
-            for(i in seq_along(annotation_files)) {
-                current_file <- annotation_files[i]
-                
-                if(ann_custom_colors == "NONE") {
-                    cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                    color <- default_colors[i]
-                } else {
-                    # Split the colors string into vector if colors were provided
-                    colors <- unlist(strsplit(ann_custom_colors, " "))
-                    if(length(colors) >= i) {
-                        cat(sprintf("\nDrawing custom annotations for file %s\n", current_file))
-                        color <- sprintf("#%s", colors[i])
-                    } else {
-                        cat(sprintf("\nUsing default color %s for custom annotation file %s\n", default_colors[i], current_file))
-                        color <- default_colors[i]
-                    }
-                }
-                
-                # Draw annotations for both x and y axes
-                draw_bed_inter(current_file, color, track_depths[i], FALSE, w, top, "x", 
-                            interval_start1, interval_len1, interval_start2, interval_len2, 
-                            plot_width, plot_height)
-                draw_bed_inter(current_file, color, track_depths[i], FALSE, w, top, "y",
-                            interval_start1, interval_len1, interval_start2, interval_len2, 
-                            plot_width, plot_height)
+      # Custom Annotations
+      if (ann_custom != "NONE") {
+        # Split the annotation files string into a vector
+        annotation_files <- unlist(strsplit(ann_custom, " "))
+        
+        # Define default colors and track depths
+        default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
+        track_depths <- c(-0.5, -0.8, -1.1, -1.4)
+        
+        for (i in seq_along(annotation_files)) {
+          current_file <- annotation_files[i]
+          
+          # Decide which color to use
+          if (ann_custom_colors == "NONE") {
+            this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
+            cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+          } else {
+            # Split the provided colors and ensure a '#' is included
+            colors <- unlist(strsplit(ann_custom_colors, " "))
+            if (length(colors) >= i) {
+              this_color <- if (substr(colors[i], 1, 1) == "#") colors[i] else paste0("#", colors[i])
+            } else {
+              this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
             }
+            cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+          }
+          
+          # Draw annotations for both x and y axes
+          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "x",
+                         interval_start1, interval_len1, interval_start2, interval_len2,
+                         plot_width, plot_height)
+          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "y",
+                         interval_start1, interval_len1, interval_start2, interval_len2,
+                         plot_width, plot_height)
+          
+          # Update legend elements using the base name of the file
+          legend_labels <- c(legend_labels, basename(current_file))
+          legend_colors <- c(legend_colors, this_color)
+        }
       } else {
-            no_cus_ann <- TRUE
+        no_cus_ann <- TRUE
+      }
+      
+      # Draw the legend if there are any annotation labels
+      if (length(legend_labels) > 0) {
+        legend(-2, 127, legend = legend_labels, col = legend_colors, lwd = 1,
+               box.lty = 0, cex = 0.8, text.col = "#888888")
       }
     }
     
-    if( flag_profiles ){
-      draw_profiles_inter_two_sample()
+    if (flag_profiles) {
+      draw_profiles_inter()
     }
     
-    device <- dev.off()
+    device_off <- dev.off()
   }
 }
