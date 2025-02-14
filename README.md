@@ -28,7 +28,8 @@ AQuA-Tools can be used through any of the following entrypoints:
 
 Tools that use inherent normalization [Chakraborty et. al., manuscript in preparation], i.e. `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C` will be incompatible in local installation.
 
-<img width="620" alt="Image" src="https://github.com/user-attachments/assets/2f04bd37-6021-4fce-81ea-da5d06f6ad2f" />
+<img width="660" alt="Image" src="https://github.com/user-attachments/assets/9572f001-24d3-4997-930a-bccc1fdf9baf" />
+
 
 ### Tinker
 [Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
