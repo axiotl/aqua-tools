@@ -19,22 +19,24 @@
 ### Publication
 >Gryder, B.E., Khan, J. & Stanton, B.Z. Measurement of differential chromatin interactions with absolute quantification of architecture (AQuA-HiChIP). Nat Protoc 15, 1209–1236 (2020). https://doi.org/10.1038/s41596-019-0285-9
 
-## Availability
-tool chart and description
 
-## Use
+## Use and Availability
 AQuA-Tools can be used through any of the following entrypoints:
 - [Tinker Cloud Platform](#tinker)
 - [Docker Container](#docker)
 - [Local Installation](#local)
 
+Tools that use inherent normalization [Chakraborty et. al., manuscript in preparation], i.e. `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C` will be incompatible in local installation.
+
+
 ### Tinker
 [Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
 
-- **Immediate Access**: No installation required and immeditely accessible via browser
-- **Pre-loaded Data**: Access to a collection of reference datasets and invariant genome annotations
-- **Access to all tools**: Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
-- **Optimized processing**: Faster outputs for large `build_bedpe` calls
+**Key Features:**
+- No installation required and immeditely accessible via browser
+- Access to a collection of reference datasets and invariant genome annotations
+- Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
+- Faster outputs for large `build_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
 - **Collaborative Features**: Share files and analyses with team members
@@ -50,12 +52,11 @@ To use AQuA tools locally, we highly recommend using Docker for an easy and cohe
 
 **Key Features:**
 - Isolated environment with all dependencies
-- Easy updates and version management
-- Portable analysis environment
+- Regular updates with addition of more publically available HiChIPs
 
 Similar to [Tinker](https://tinker.axiotl.com/public), the container built using the image will come with:
-- **Pre-loaded Data**: Access to common reference datasets and invariant genome annotations
-- **Access to all tools**
+- Access to a collection of reference datasets and invariant genome annotations
+- Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
 
 **Prerequisites:**
 - **Docker Desktop**
