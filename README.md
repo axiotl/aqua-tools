@@ -32,13 +32,15 @@ AQuA-Tools can be used through any of the following entrypoints:
 [Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
 
 - **Immediate Access**: No installation required and immeditely accessible via browser
-- **Pre-loaded Data**: Access to common reference datasets and invariant genome annotations
-- **Access to all tools**
+- **Pre-loaded Data**: Access to a collection of reference datasets and invariant genome annotations
+- **Access to all tools**: Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
+- **Optimized processing**: Faster outputs for large `build_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
 - **Collaborative Features**: Share files and analyses with team members
 - **Scalable Computing**: Handle large datasets efficiently
 - **Unlimited access**: No time cap for Tinker use time
+- **Pre-built notebooks**: Ready to use notebooks shoehorned to 3D genomic research questions
 
 To get started with Tinker, visit [tinker](https://tinker.axiotl.com/public)
 
