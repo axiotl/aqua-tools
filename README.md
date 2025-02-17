@@ -26,10 +26,9 @@ AQuA-Tools can be used through any of the following entrypoints:
 - [Docker Container](#docker)
 - [Local Installation](#local)
 
-AQuA tools `plot_contacts` and `extract_bedpe` will be incompatible in local installation, along with the use of the parameter `--inherent` for any tool.
+AQuA tools `annotate_clusters`, `plot_contacts` and `extract_bedpe` will be incompatible in local installation, along with the use of the parameter `--inherent` for any tool.
 
-<img src="https://github.com/user-attachments/assets/95444395-917b-43c4-9941-90bfda4b4e0d" width="750" height="550">
-
+<img src="https://github.com/user-attachments/assets/ba022609-b24b-4f9a-a121-3f99eef21bb3" width="750" height="550">
 
 ### Tinker
 [Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
@@ -37,7 +36,7 @@ AQuA tools `plot_contacts` and `extract_bedpe` will be incompatible in local ins
 **Key Features:**
 - No installation required and immeditely accessible via browser
 - Access to a collection of reference datasets and invariant genome annotations
-- Access to all tools, including `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
+- Access to all tools, including `annotate_clusters`, `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 - Faster outputs for large `build_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
@@ -58,7 +57,7 @@ To use AQuA tools locally, we highly recommend using Docker for an easy and cohe
 
 Similar to [Tinker](https://tinker.axiotl.com/public), the container built using the image will come with:
 - Access to a collection of reference datasets and invariant genome annotations
-- Access to all tools, including `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
+- Access to all tools, including `annotate_clusters`, `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 
 **Prerequisites:**
 - **Docker Desktop**
