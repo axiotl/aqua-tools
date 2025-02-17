@@ -26,7 +26,7 @@ AQuA-Tools can be used through any of the following entrypoints:
 - [Docker Container](#docker)
 - [Local Installation](#local)
 
-Tools that use inherent normalization [Chakraborty et. al., manuscript in preparation], i.e. `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C` will be incompatible in local installation.
+AQuA tools `plot_contacts` and `extract_bedpe` will be incompatible in local installation, along with the use of the parameter `--inherent` for any tool.
 
 <img width="660" alt="Image" src="https://github.com/user-attachments/assets/9572f001-24d3-4997-930a-bccc1fdf9baf" />
 
@@ -37,7 +37,7 @@ Tools that use inherent normalization [Chakraborty et. al., manuscript in prepar
 **Key Features:**
 - No installation required and immeditely accessible via browser
 - Access to a collection of reference datasets and invariant genome annotations
-- Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
+- Access to all tools, including `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 - Faster outputs for large `build_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
@@ -54,11 +54,11 @@ To use AQuA tools locally, we highly recommend using Docker for an easy and cohe
 
 **Key Features:**
 - Isolated environment with all dependencies
-- Regular updates with addition of more publically available HiChIPs
+- Regular updates with addition of publically available HiChIPs
 
 Similar to [Tinker](https://tinker.axiotl.com/public), the container built using the image will come with:
 - Access to a collection of reference datasets and invariant genome annotations
-- Access to all tools, including `extract_bedpe` and parameter `--inherent` for `plot_contacts`, `query_bedpe` and `plot_virtual_4C`
+- Access to all tools, including `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 
 **Prerequisites:**
 - **Docker Desktop**
