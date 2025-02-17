@@ -55,6 +55,12 @@ RUN wget https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication
     mv aqua_tools_publication/* . && \
     rm -r aqua_tools_publication aqua_tools_publication.tar.gz
 
+# Install AQuA tools
+RUN wget https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip && \
+    unzip main.zip && \
+    mv aqua-tools-main aqua_tools && \
+    rm main.zip
+
 RUN echo "alias query_bedpe='/home/ubuntu/aqua_tools/query_bedpe.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias annotate_cluster='/home/ubuntu/aqua_tools/annotate_cluster.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias build_bedpe='/home/ubuntu/aqua_tools/build_bedpe.sh'" >> /home/ubuntu/.bashrc && \
