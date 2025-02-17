@@ -74,7 +74,8 @@ RUN echo "alias query_bedpe='/home/ubuntu/aqua_tools/query_bedpe.sh'" >> /home/u
     echo "alias list_tools='/home/ubuntu/aqua_tools/list_tools.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias plot_APA='/home/ubuntu/aqua_tools/plot_APA.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias plot_contacts='/home/ubuntu/aqua_tools/plot_contacts.sh'" >> /home/ubuntu/.bashrc && \
-    echo "alias plot_virtual_4C='/home/ubuntu/aqua_tools/plot_virtual_4C.sh'" >> /home/ubuntu/.bashrc
+    echo "alias plot_virtual_4C='/home/ubuntu/aqua_tools/plot_virtual_4C.sh'" >> /home/ubuntu/.bashrc && \
+    echo "alias ll='ls -lh'" >> /home/ubuntu/.bashrc
 
 
 RUN mkdir -p container_outputs
