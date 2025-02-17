@@ -16,6 +16,7 @@ RUN apt update && apt install -y \
     nano \
     tar \
     bedtools \
+    bc \
     gnupg && \
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 51716619E084DAB9 && \
     echo "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /etc/apt/sources.list.d/cran.list && \
