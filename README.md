@@ -28,7 +28,7 @@ AQuA-Tools can be used through any of the following entrypoints:
 
 AQuA tools `plot_contacts` and `extract_bedpe` will be incompatible in local installation, along with the use of the parameter `--inherent` for any tool.
 
-![Image](https://github.com/user-attachments/assets/95444395-917b-43c4-9941-90bfda4b4e0d)
+<img src="https://github.com/user-attachments/assets/95444395-917b-43c4-9941-90bfda4b4e0d" width="750" height="550">
 
 
 ### Tinker
