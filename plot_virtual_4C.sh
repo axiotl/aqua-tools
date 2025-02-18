@@ -5,12 +5,11 @@ OPTIND=1
 norm_method=NONE
 unit=BP
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir=~/lab-data
+aqua_dir=~/aqua_tools
 
 
-sample_sheet="~/setup/sample_sheet.txt"
-
+sample_sheet="/home/ubuntu/setup/sample_sheet.txt"
 
 juicer_tools='java -jar ~/juicer_tools_1.19.02.jar'
 
