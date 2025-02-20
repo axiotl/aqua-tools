@@ -148,6 +148,7 @@ Rscript --slave --no-save --no-restore-history -e '
 
 ## Recipes
 All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
+Detailed material on how to use the tools can be found at our [Docs](https://docs.axiotl.com/).
 
 ### Getting Started
 View available samples:
@@ -161,7 +162,7 @@ list_tools
 ```
 
 ### I. Loop Calling
-We use `extract_bedpe` to call loops using a sample of interest. The tool supports both targeted interval analysis and genome-wide loop calling.
+We use `extract_bedpe` to call loops using a sample of interest. The tool supports both regional and genome-wide loop calling.
 
 #### Loop calling for a range/interval:
 ```bash
