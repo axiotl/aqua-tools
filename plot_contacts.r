@@ -392,7 +392,7 @@ draw_contacts <- function(A, C, left_side, bedpe) {
     }
 
     # Set annotation interval based on bin size
-    annotation_interval <- if (bin_size == 1000) 20 else 10
+    annotation_interval <- ifelse(bin_size == 1000, 20, ifelse(bin_size %in% c(5000, 10000, 25000, 50000), 10, ifelse(bin_size >= 100000, 2, 10)))
 
     for (j in seq(1, n_cols, by = annotation_interval)) {
       bin_label <- bin_coordinates[j]
@@ -521,12 +521,13 @@ draw_feature_inter <- function(
   clipped_end <- min(do, interval_start + interval_len)
   
   genomic_region_label <- sprintf("%s:%d-%d", chr, clipped_start, clipped_end)
-  
+
+  # +bin_size fixes annotation drift 
   calculate_position <- function(pos) {
-    relative_position <- (pos - interval_start) / interval_len
+    relative_position <- (pos - interval_start) / (interval_len + bin_size)
     return(relative_position * ifelse(axis == "x", plot_width, plot_height))
   }
-  
+
   str <- calculate_position(clipped_start)
   end <- calculate_position(clipped_end)
   
@@ -564,7 +565,7 @@ draw_feature_inter <- function(
       text(label_x, label_y, label, col = col, cex = 0.2 * (plot_height / 100), pos = 2, adj = 1)
       
       # Add dotted line
-      dotted_line_end <- x_position - x_adjustment  # Keep the original length for dotted line
+      dotted_line_end <- x_position - x_adjustment
       segments(
         x_position, y_end,
         dotted_line_end, y_end,
@@ -663,12 +664,13 @@ draw_bed_inter <- function(
 
 
 draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height, top) {
-
+  
   n_rows <- nrow(A)
   n_cols <- ncol(A)
   cell_width  <- plot_width / n_cols
   cell_height <- plot_height / n_rows
   
+  # Draw contact matrix
   for (i in 1:n_rows) {
     for (j in 1:n_cols) {
       color <- rownames(C[order(abs(C[,"breaks"] - A[i, j]), decreasing = FALSE), ])[1]
@@ -683,6 +685,33 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height,
     }
   }
   
+  # Annotate the x-axis (columns) with labels aligned at the start (left edge) of the bin
+  annotation_interval <- ifelse(bin_size == 1000, 20, ifelse(bin_size %in% c(5000, 10000, 25000, 50000), 10, ifelse(bin_size >= 100000, 2, 10)))
+  
+  bottom_y <- top - n_rows * cell_height
+  for (j in seq(1, n_cols, by = annotation_interval)) {
+    bin_label <- colnames(A)[j]
+    # Place the label at the left edge of the cell
+    label_x <- left_side + (j - 1) * cell_width
+    # Position the label just below the contact matrix
+    label_y <- bottom_y - 0.5 * cell_height
+    text(label_x, label_y, labels = bin_label, cex = 0.05, col = "#8B8B8B", adj = 0)
+    segments(x0 = label_x, y0 = bottom_y, x1 = label_x, y1 = label_y + 0.25,
+             col = "#B2B2B2", lty = "dotted", lwd = 0.2)
+  }
+  
+  # Annotate the y-axis (rows) with labels aligned at the top edge of the bin
+  for (i in seq(1, n_rows, by = annotation_interval)) {
+    bin_label <- rownames(A)[i]
+    # Place the label at the top edge of the row
+    label_y <- top - (i - 1) * cell_height
+    # Position the label just to the left of the contact matrix
+    label_x <- left_side - 0.5 * cell_width
+    text(label_x, label_y, labels = bin_label, cex = 0.05, col = "#8B8B8B", adj = 1)
+    segments(x0 = left_side, y0 = label_y, x1 = label_x + 0.25, y1 = label_y,
+             col = "#B2B2B2", lty = "dotted", lwd = 0.2)
+  }
+  
   # Draw BEDPE highlights
   if (bedpe != "FALSE") {
     for (p in seq_len(nrow(pairs))) {
@@ -691,7 +720,7 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height,
       x2 <- left_side + (pairs$i_end[p]) * cell_width
       y2 <- top - (pairs$j_end[p]) * cell_height
       
-      # Draw the rectangle highlighting the BEDPE region
+      # Draw bedpe highlight
       rect(
         x1, y1, x2, y2,
         border = bedpe_color, 
@@ -701,6 +730,7 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height,
     }
   }
 }
+
 
 
 
@@ -809,6 +839,10 @@ if(flag_inter == "FALSE"){
         
         if( sum( grepl( "chr", pairs$chr1 ) ) == 0 ) { pairs$chr1 <- paste0( "chr", pairs$chr1 ) }
         if( sum( grepl( "chr", pairs$chr2 ) ) == 0 ) { pairs$chr2 <- paste0( "chr", pairs$chr2 ) }
+        
+        # Adjust end coordinates for half open binning
+        pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
+        pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
         
         # subset pairs to interval length
         pairs <- pairs[ pairs[, "chr1"] == interval_chr, ]
@@ -1494,6 +1528,10 @@ if(flag_inter == "FALSE"){
         if( sum( grepl( "chr", pairs$chr1 ) ) == 0 ) { pairs$chr1 <- paste0( "chr", pairs$chr1 ) }
         if( sum( grepl( "chr", pairs$chr2 ) ) == 0 ) { pairs$chr2 <- paste0( "chr", pairs$chr2 ) }
         
+        # Adjust end coordinates for half open binning
+        pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
+        pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
+        
         # subset pairs to interval length
         pairs <- pairs[ pairs[, "chr1"] == interval_chr, ]
         pairs <- pairs[ 
@@ -2018,7 +2056,7 @@ if(flag_inter == "TRUE"){
         pairs <- read.table(bedpe, as.is = TRUE, header = FALSE)[, 1:6]
         colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
         
-        # Ensure chromosome names have 'chr' prefix
+        # Make sure chromosome names have 'chr' prefix
         pairs$chr1 <- ifelse(grepl("chr", pairs$chr1), pairs$chr1, paste0("chr", pairs$chr1))
         pairs$chr2 <- ifelse(grepl("chr", pairs$chr2), pairs$chr2, paste0("chr", pairs$chr2))
         
@@ -2047,14 +2085,18 @@ if(flag_inter == "TRUE"){
           # Reset column names (if needed)
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
           
+          # Adjust end coordinates for half open binning
+          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
+          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
+          
           # Convert coordinates to bins
           pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
           pairs$end1_bin   <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
           pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
           pairs$end2_bin   <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
           
-          # Calculate plotting coordinates.
-          # Use interval_start1 for the first set and interval_start2 for the second set.
+          # Calculate plotting coordinates
+          # Use interval_start1 for the first set and interval_start2 for the second set
           pairs$i <- (pairs$start1_bin - interval_start1) / bin_size + 1 
           pairs$j <- (pairs$start2_bin - interval_start2) / bin_size + 1
           pairs$i_end <- (pairs$end1_bin - interval_start1) / bin_size + 1
@@ -2247,7 +2289,7 @@ if(flag_inter == "TRUE"){
       legend_labels <- c()
       legend_colors <- c()
       
-      # Default Annotation (TSS)
+      # Default Annotations
       if (ann_default) {
         if (genome_build == "hg19") {
           cat("\nDrawing default annotations for hg19\n")
@@ -2497,6 +2539,10 @@ if(flag_inter == "TRUE"){
           
           # Reset column names
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
+          
+          # Adjust end coordinates for half open binning
+          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
+          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
           
           # Convert coordinates to bins
           pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
@@ -2761,7 +2807,7 @@ if(flag_inter == "TRUE"){
       legend_labels <- c()
       legend_colors <- c()
       
-      # Default Annotation (TSS)
+      # Default Annotations
       if (ann_default) {
         if (genome_build == "hg19") {
           cat("\nDrawing default annotations for hg19\n")
