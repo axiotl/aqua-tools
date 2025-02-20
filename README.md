@@ -89,29 +89,43 @@ sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
 **Note**: Keep all outputs in `~/container_outputs` to access them after exiting the container.
 
 ### Local 
-For users who need maximum flexibility or have specific system requirements, AQuA-Tools can be installed directly on your local machine.
+A subset of AQuA Tools can work directly on your local machine. 
 
-**Prerequisites:**
-- Python 3.8 or higher
-- R 4.0 or higher
-- gcc/g++ compiler
-- Development libraries for HDF5 and zlib
-
-**Installation Steps:**
-
-1. Install system dependencies:
+AQuA tools require the following shell dependencies-
 ```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install -y \
-    python3-dev \
-    r-base \
-    libhdf5-dev \
-    zlib1g-dev \
-    build-essential
+apt update && apt install -y \
+    openjdk-8-jdk \
+    openjdk-8-jre \
+    software-properties-common \
+    libcurl4-openssl-dev \
+    libxml2-dev \
+    libssl-dev \
+    bedtools \
+    bc \
+    gnupg
 ```
 
-2.
+AQuA tools require the following R dependencies-
+```r
+Rscript --slave --no-save --no-restore-history -e '
+    if (!requireNamespace("remotes", quietly = TRUE)) {
+        install.packages("remotes", repos = "http://www.freestatistics.org/cran/")
+    }
+    remotes::install_github("aidenlab/straw/R")
+'
+
+Rscript --slave --no-save --no-restore-history -e '
+    if (!requireNamespace("BiocManager", quietly = TRUE)) {
+        install.packages("BiocManager", repos = "http://www.freestatistics.org/cran/")
+    }
+    BiocManager::install(c(
+        "GenomicRanges",
+        "HiCcompare",
+        "InteractionSet",
+        "S4Vectors"
+    ))
+'
+```
 
 ## Recipes
 All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
@@ -171,8 +185,72 @@ plot_contacts \
  --output_name $output_dir/MYC.pdf
 ```
 
+### III. Differential loops
+```
+# pre-loaded samples 
+# [type list_samples to view sample names]
+sample1=RH4_DMSO_H3K27ac
+sample2=RH4_HDACi_H3K27ac
+genome_build=hg38
+resolution=5000
 
+# invariant reference TAD file 
+TAD_file=~/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
 
+# call genome-wide loops for each sample
+extract_bedpe \
+ --sample1 $sample1 \
+ --genome $genome_build \
+ --TAD $TAD_file \
+ --resolution $resolution > "$sample1"_gw-loops_"$genome_build".bedpe
+
+extract_bedpe \
+ --sample1 $sample2 \
+ --genome $genome_build \
+ --TAD $TAD_file \
+ --resolution $resolution > "$sample2"_gw-loops_"$genome_build".bedpe
+
+# merge the called genome-wide loops
+# into one file
+union_bedpe \
+ --bedpe "$sample1"_gw-loops_"$genome_build".bedpe \
+ --bedpe "$sample2"_gw-loops_"$genome_build".bedpe > union_scaffold.bedpe
+
+# cluster the unioned scaffold to obtain
+# bedpe membership
+cluster_bedpe \
+ --bedpe union_scaffold.bedpe > union_scaffold_clustered.bedpe
+
+# annotate union scaffold bedpe with 
+# contact values
+query_bedpe \
+ --bedpe union_scaffold_clustered.bedpe \
+ --sample1 $sample1 \
+ --sample2 $sample2 \
+ --genome $genome_build \
+ --resolution $resolution \
+ --formula max \
+ --inherent TRUE > union_scaffold_inh-annotated.bedpe
+
+# find differential looping using
+# standard inherent score 1
+awk '$NF>= 1{print $0}' union_scaffold_inh-annotated.bedpe > loop-gains.bedpe
+awk '$NF<=-1{print $0}' union_scaffold_inh-annotated.bedpe > loop-losses.bedpe
+
+# visualise gains and losses
+# using APA plotting
+plot_APA \
+ --bedpe loop-gains.bedpe \
+ --sample1 $sample1 \
+ --sample2 $sample2 \
+ --out-dir $(pwd)
+
+plot_APA \
+ --bedpe loop-losses.bedpe \
+ --sample1 $sample1 \
+ --sample2 $sample2 \
+ --out-dir $(pwd)
+```
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
