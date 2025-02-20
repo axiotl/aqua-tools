@@ -108,6 +108,25 @@ apt update && apt install -y \
 AQuA tools require the following R dependencies-
 ```r
 Rscript --slave --no-save --no-restore-history -e '
+    install.packages(
+        c(
+            "data.table",
+            "ggplot2",
+            "dplyr",
+            "tidyr",
+            "remotes",
+            "parallel",
+            "pheatmap",
+            "gridExtra",
+            "RCurl",
+            "dbscan",
+            "igraph"
+        ),
+        repos = "http://www.freestatistics.org/cran/"
+    )
+'
+
+Rscript --slave --no-save --no-restore-history -e '
     if (!requireNamespace("remotes", quietly = TRUE)) {
         install.packages("remotes", repos = "http://www.freestatistics.org/cran/")
     }
