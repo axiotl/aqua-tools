@@ -205,8 +205,9 @@ plot_contacts \
 ```
 
 ### III. Differential loops
+
+#### Pre-loaded samples
 ```
-# pre-loaded samples 
 # [type list_samples to view sample names]
 sample1=RH4_DMSO_H3K27ac
 sample2=RH4_HDACi_H3K27ac
@@ -215,8 +216,9 @@ resolution=5000
 
 # invariant reference TAD file 
 TAD_file=~/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
-
-# call genome-wide loops for each sample
+```
+#### Call genome-wide loops for each sample
+```
 extract_bedpe \
  --sample1 $sample1 \
  --genome $genome_build \
@@ -228,20 +230,20 @@ extract_bedpe \
  --genome $genome_build \
  --TAD $TAD_file \
  --resolution $resolution > "$sample2"_gw-loops_"$genome_build".bedpe
-
-# merge the called genome-wide loops
-# into one file
+```
+#### Merge the called genome-wide loops into one file
+```
 union_bedpe \
  --bedpe "$sample1"_gw-loops_"$genome_build".bedpe \
  --bedpe "$sample2"_gw-loops_"$genome_build".bedpe > union_scaffold.bedpe
-
-# cluster the unioned scaffold to obtain
-# bedpe membership
+```
+#### Cluster the unioned scaffold to obtain bedpe membership
+```
 cluster_bedpe \
  --bedpe union_scaffold.bedpe > union_scaffold_clustered.bedpe
-
-# annotate union scaffold bedpe with 
-# contact values
+```
+#### Annotate union scaffold bedpe with contact values
+```
 query_bedpe \
  --bedpe union_scaffold_clustered.bedpe \
  --sample1 $sample1 \
@@ -250,14 +252,14 @@ query_bedpe \
  --resolution $resolution \
  --formula max \
  --inherent TRUE > union_scaffold_inh-annotated.bedpe
-
-# find differential looping using
-# standard inherent score 1
+```
+#### Threshold with standard inherent score 1 
+```
 awk '$NF>= 1{print $0}' union_scaffold_inh-annotated.bedpe > loop-gains.bedpe
 awk '$NF<=-1{print $0}' union_scaffold_inh-annotated.bedpe > loop-losses.bedpe
-
-# visualise gains and losses
-# using APA plotting
+```
+#### Visualise gains and losses using APA plotting
+```
 plot_APA \
  --bedpe loop-gains.bedpe \
  --sample1 $sample1 \
