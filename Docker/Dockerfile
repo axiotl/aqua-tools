@@ -1,3 +1,4 @@
+# Use an official Ubuntu base image
 FROM ubuntu:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,6 +14,7 @@ RUN apt update && apt install -y \
     wget \
     curl \
     vim \
+    less \
     nano \
     tar \
     bedtools \
@@ -21,8 +23,10 @@ RUN apt update && apt install -y \
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 51716619E084DAB9 && \
     echo "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /etc/apt/sources.list.d/cran.list && \
     apt update && apt install -y r-base && \
-    apt clean && rm -rf /var/lib/apt/lists/*
+    apt clean && rm -rf /var/lib/apt/lists/* 
 
+RUN apt install -y sudo && \
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Install R and CRAN packages
 RUN Rscript --slave --no-save --no-restore-history -e 'install.packages(\
@@ -37,7 +41,6 @@ RUN Rscript --slave --no-save --no-restore-history -e 'if (!requireNamespace("re
 # Install Bioconductor packages
 RUN Rscript --slave --no-save --no-restore-history -e 'if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos = "http://www.freestatistics.org/cran/"); BiocManager::install(c("GenomicRanges", "HiCcompare", "InteractionSet", "S4Vectors"))'
 
-
 RUN id -u ubuntu &>/dev/null || useradd -m -d /home/ubuntu -s /bin/bash ubuntu
 
 WORKDIR /home/ubuntu
@@ -49,17 +52,17 @@ RUN echo "export juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar'" >> /ho
     echo "export PATH=\"$HOME/aqua_tools:$PATH\"" >> /home/ubuntu/.bashrc && \
     chown ubuntu:ubuntu /home/ubuntu/.bashrc
 
-# AQuA tools and sample data
-RUN wget https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication.tar.gz && \
-    tar -xzvf aqua_tools_publication.tar.gz && \
+# AQuA tools and sample data (Always fetch the latest)
+RUN wget -O latest_aqua_tools.tar.gz "https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication.tar.gz?cache-bust=$(date +%s)" && \
+    tar -xzvf latest_aqua_tools.tar.gz && \
     mv aqua_tools_publication/* . && \
-    rm -r aqua_tools_publication aqua_tools_publication.tar.gz
+    rm -r aqua_tools_publication latest_aqua_tools.tar.gz
 
-# Install AQuA tools
-RUN wget https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip && \
-    unzip main.zip && \
+# Install AQuA tools from GitHub (Always fetch the latest)
+RUN wget -O latest_aqua_tools.zip "https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip?cache-bust=$(date +%s)" && \
+    unzip latest_aqua_tools.zip && \
     mv aqua-tools-main aqua_tools && \
-    rm main.zip
+    rm latest_aqua_tools.zip
 
 RUN echo "alias query_bedpe='/home/ubuntu/aqua_tools/query_bedpe.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias annotate_cluster='/home/ubuntu/aqua_tools/annotate_cluster.sh'" >> /home/ubuntu/.bashrc && \
@@ -77,9 +80,7 @@ RUN echo "alias query_bedpe='/home/ubuntu/aqua_tools/query_bedpe.sh'" >> /home/u
     echo "alias plot_virtual_4C='/home/ubuntu/aqua_tools/plot_virtual_4C.sh'" >> /home/ubuntu/.bashrc && \
     echo "alias ll='ls -lh'" >> /home/ubuntu/.bashrc
 
-
 RUN mkdir -p container_outputs
-
 
 # Set a default command to run an interactive shell
 CMD ["/bin/bash"]
