@@ -29,8 +29,10 @@ function help {
     echo "    -P|--bedpe                  : Path to the bedpe file, without headers"
     echo "    -A|--sample1                : Name of the sample as it appears on the Tinkerbox"
     echo "    -G|--genome                 : Genome build used for sample processing"
+    echo " [     --hic1                ]  : If not using the tinkerbox, directly specify the full path to the .hic"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
     echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample"
+    echo " [     --hic2                ]  : If not using the tinkerbox, provide the path to the second .hic"
     echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution          ]  : Bin size you want to use for the APA plots. Default 5000"
     echo " [     --max_cap             ]  : Upper limit of the plot range. Defaults to max bin value"
@@ -63,6 +65,8 @@ for arg in "$@"; do
       "--min_cap")              set -- "$@" "-e" ;;
       "--max_cap_delta")        set -- "$@" "-d" ;;
       "--loop_norm")            set -- "$@" "-l" ;;
+      "--hic1")                 set -- "$@" "-H" ;;
+      "--hic2")                 set -- "$@" "-I" ;;
       "--help")                 set -- "$@" "-h" ;;
        *)                       set -- "$@" "$arg"
   esac
@@ -73,8 +77,10 @@ c="no_cap"
 d="no_cap"
 e="no_cap"
 l=FALSE
+H=blank  
+I=blank
 
-while getopts ":P:A:G:O:B:Q:r:c:e:d:f:l:h" OPT
+while getopts ":P:A:G:O:B:Q:r:c:e:d:f:l:H:I:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -88,6 +94,8 @@ do
   l) l=$OPTARG;;
   d) d=$OPTARG;;
   e) e=$OPTARG;;
+  H) H=$OPTARG;;
+  I) I=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -102,21 +110,48 @@ do
     esac
 done
 
-
-
-# If no sample B, the variable is empty:
-if [ -z "$B" ]; then
-  case $B in
-  B) B="";;
-  esac
-fi
-
 #----------------------------------
 
 if [[ -z $P ]];
 then
     usage
     exit
+fi
+
+#----------------------------------
+
+if [[ -z $G ]];
+then
+  usage
+  exit
+fi
+
+#----------------------------------
+
+# Validate sample1/hic1 inputs
+if [[ -z "$A" && "$H" == "blank" ]]; then
+    echo "No sample1 or hic1 provided. Exiting."
+    usage
+    exit 1
+fi
+
+if [[ ! -z "$A" && "$H" != "blank" ]]; then
+    echo "Need either sample1 name or hic1 path, not both. Exiting."
+    usage
+    exit 1
+fi
+
+# Initialize as single sample analysis
+two_sample=FALSE
+
+# Check sample2/hic2 inputs
+if [[ ! -z "$B" || "$I" != "blank" ]]; then
+    if [[ ! -z "$B" && "$I" != "blank" ]]; then
+        echo "Need either sample2 name or hic2 path, not both. Exiting."
+        usage
+        exit 1
+    fi
+    two_sample=TRUE
 fi
 
 #----------------------------------
@@ -135,11 +170,7 @@ fi
 
 #----------------------------------
 
-if [[ -z $A ]];
-then
-    usage
-    exit
-fi
+
 
 get_sample_directory() {
 
@@ -168,52 +199,129 @@ get_sample_directory() {
     fi
 }
 
-
-# Update sample A
-sample_dir_A=$(get_sample_directory "$A")
-if [ $? -eq 0 ]; then
-    version_dir_A=$(basename "$sample_dir_A")
-    base_dir_A=$(basename "$(dirname "$sample_dir_A")")
-    A="${base_dir_A}/${version_dir_A}"
-else
-    echo "Sample directory not found. Exiting."
-    exit 1
-fi
+cat > /tmp/calculate_stats.r << 'EOF'
+suppressPackageStartupMessages(library(strawr))
+args <- commandArgs(trailingOnly = T)
+hic_file <- args[1] 
+sample   <- args[2]
+genome   <- args[3]
+chromosomes <- readHicChroms(hic_file)
+chromosomes <- chromosomes[chromosomes[,"length"] > 46000000,"name"]
+if("All" %in% chromosomes){
+ chromosomes <- chromosomes[-(which(chromosomes == "All"))]}
+total_counts <- 0
+for(i in 1:length(chromosomes)){
+ for(j in i:length(chromosomes)){
+   try({
+     mat <- straw("NONE", hic_file, chromosomes[i], chromosomes[j], "BP", 2500000)
+     count <- sum(mat[,"counts"])
+     total_counts <- total_counts + count
+   }, silent = TRUE)  
+ }
+}
+interaction_types <- c("valid_interaction", "valid_interaction_rmdup", "trans_interaction", "cis_interaction", "cis_shortRange", "cis_longRange")
+values            <- c(total_counts, total_counts, "-", "-", "-", "-")
+mergeStats <- data.frame(interaction_type = interaction_types, values = as.character(values))
+header <- paste(sample, genome, sep = ".")
+cat("\t",header, "\n")
+for (row in 1:nrow(mergeStats)) {
+ cat(paste(mergeStats[row, "interaction_type"], "\t", mergeStats[row, "values"]), "\n")
+}
+EOF
 
 #----------------------------------
 
-if [[ -z $G ]];
-then
-    usage
-    exit
-fi
+if [ "$two_sample" == "FALSE" ] ; then
 
-#----------------------------------
+    if [ "$H" == "blank" ]; then
 
-# Check if there is a parameter provided for -B
-if [[ -n $B ]]; then
-    # Get sample directory B
-    sample_dir_B=$(get_sample_directory "$B")
-    if [ $? -eq 0 ]; then
-        version_dir_B=$(basename "$sample_dir_B")
-        base_dir_B=$(basename "$(dirname "$sample_dir_B")")
-        B="${base_dir_B}/${version_dir_B}"
-    else
-        echo "Sample directory not found. Exiting."
-        exit 1
+        # Update sample A
+        sample_dir_A=$(get_sample_directory "$A")
+        if [ $? -eq 0 ]; then
+            version_dir_A=$(basename "$sample_dir_A")
+            base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+            A="${base_dir_A}/${version_dir_A}"
+        else
+            echo "Sample directory not found. Exiting."
+            exit 1
+        fi
+
+        path_hic="$data_dir"/"$G"/"$A"/"${version_dir_A}".allValidPairs.hic
+        path_mgs="$data_dir"/"$G"/"$A"/mergeStats.txt 
+        hic_basename=$(basename "$path_hic")
+
+    else 
+
+        path_hic=$H
+        hic_basename=$(basename "$H")
+        Rscript /tmp/calculate_stats.r "$path_hic" "sample" "$G" > /tmp/mergeStats.txt
+        path_mgs=/tmp/mergeStats.txt
+
     fi
+
 fi
+
+
+if [ "$two_sample" == "TRUE" ] ; then
+   # Handle first sample (A or H)
+   if [ "$H" == "blank" ]; then
+       # Using sample A
+       sample_dir_A=$(get_sample_directory "$A")
+       if [ $? -eq 0 ]; then
+           version_dir_A=$(basename "$sample_dir_A")
+           base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+           A="${base_dir_A}/${version_dir_A}"
+           path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+           path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
+           hic_A_basename=$(basename "$path_hic_A")
+       else
+           echo "Sample A directory not found. Exiting."
+           exit 1
+       fi
+   else
+       # Using hic1
+       path_hic_A=$H
+       hic_A_basename=$(basename "$H")
+       Rscript /tmp/calculate_stats.r "$path_hic_A" "sample_A" "$G" > /tmp/mergeStats_A.txt
+       path_mgs_A=/tmp/mergeStats_A.txt
+   fi
+
+   # Handle second sample (B or I)
+   if [ "$I" == "blank" ]; then
+       # Using sample B
+       sample_dir_B=$(get_sample_directory "$B")
+       if [ $? -eq 0 ]; then
+           version_dir_B=$(basename "$sample_dir_B")
+           base_dir_B=$(basename "$(dirname "$sample_dir_B")")
+           B="${base_dir_B}/${version_dir_B}"
+           path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
+           path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
+           hic_B_basename=$(basename "$path_hic_B")
+       else
+           echo "Sample B directory not found. Exiting."
+           exit 1
+       fi
+   else
+       # Using hic2
+       path_hic_B=$I
+       hic_B_basename=$(basename "$I")
+       Rscript /tmp/calculate_stats.r "$path_hic_B" "sample_B" "$G" > /tmp/mergeStats_B.txt
+       path_mgs_B=/tmp/mergeStats_B.txt
+   fi
+fi
+
+#----------------------------------
 
 # Determine the generated output name based on whether -O is provided
 if [[ -z $O ]]; then
     random_num=$RANDOM
     
-    if [[ -n $B ]]; then
+    if [ "$two_sample" == "TRUE" ] ; then
         # For a two-sample test
-        O="${version_dir_A}_v_${version_dir_B}_APA_${random_num}"
+        O="${hic_A_basename}_v_${hic_B_basename}_APA_${random_num}"
     else
         # For a one-sample test
-        O="${version_dir_A}_APA_${random_num}"
+        O="${hic_basename}_APA_${random_num}"
     fi
     echo -e "\nNo output directory name provided. Generating output directory...\n"
 fi
@@ -240,50 +348,48 @@ fi
 ###########################################################################
 
 
-if [ -z "$B" ]
-then 
+if [ "$two_sample" == "FALSE" ] ; then
 
 #----------------------------------
 
-if [[ $d != "no_cap" ]]; then
-  echo "Cannot have a delta cap in single-sample APA analysis"
-  exit
-fi
+    if [[ $d != "no_cap" ]]; then
+    echo "Cannot have a delta cap in single-sample APA analysis"
+    exit
+    fi
 
 #----------------------------------
 
-num_loops=`cat "$P" | wc -l`
+    num_loops=`cat "$P" | wc -l`
 
-out_dir="$O"
-mkdir -p "$out_dir"
-
-#----------------------------------
-
-pair1=$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic
-if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
+    out_dir="$O"
+    mkdir -p "$out_dir"
 
 #----------------------------------
 
-stat1=$data_dir/$G/$A/mergeStats.txt
-if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
-
-# Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
-echo -e "\nBeginning APA...\n"
-$juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
-
-# Copying the generated APA.txt to APA_raw.txt
-out_mat=$out_dir/$r/gw/APA.txt
-mv "$out_mat" "$out_dir"/APA_raw.txt
+    pair1=$path_hic
+    if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
+  
+    stat1=$path_mgs
+    if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
 
-awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw.txt > "$out_dir"/APA_formatted.txt
+    # Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
+    echo -e "\nBeginning APA...\n"
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
 
-Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${version_dir_A}" "${c}" "${d}" "$out_dir/${version_dir_A}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
+    # Copying the generated APA.txt to APA_raw.txt
+    out_mat=$out_dir/$r/gw/APA.txt
+    mv "$out_mat" "$out_dir"/APA_raw.txt
 
-# Delete the specified directories and files after R script is called
-rm -r "$out_dir/$r"
-rm "$out_dir"/APA_raw.txt
-rm "$out_dir"/APA_formatted.txt
+
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw.txt > "$out_dir"/APA_formatted.txt
+
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${hic_basename}" "${c}" "${d}" "$out_dir/${hic_basename}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
+
+    # Delete the specified directories and files after R script is called
+    rm -r "$out_dir/$r"
+    rm "$out_dir"/APA_raw.txt
+    rm "$out_dir"/APA_formatted.txt
 
 fi
 
@@ -299,8 +405,7 @@ fi
 ###########################################################################
 
 
-if [ -n "$B" ]
-then 
+if [ "$two_sample" == "TRUE" ] ; then
 
     # Do all necessary parameter checks
 
@@ -311,15 +416,13 @@ then
 
     #----------------------------------
 
-    pair1=$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic
-    pair2=$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic
+    pair1=$path_hic_A
+    pair2=$path_hic_B
     if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
     if [[ ! -f $pair2 ]]; then echo "cannot find $pair2"; exit 1; fi
 
-    #----------------------------------
-
-    stat1=$data_dir/$G/$A/mergeStats.txt
-    stat2=$data_dir/$G/$B/mergeStats.txt
+    stat1=$path_mgs_A
+    stat2=$path_mgs_B
     if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
     if [[ ! -f $stat2 ]]; then echo "cannot find $stat2"; exit 1; fi
 
@@ -331,26 +434,26 @@ then
 
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
     out_mat_A=$out_dir/$r/gw/APA.txt
-    mv "$out_mat_A" "$out_dir"/APA_raw_${version_dir_A}.txt
+    mv "$out_mat_A" "$out_dir"/APA_raw_${hic_A_basename}.txt
 
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$P" "$out_dir" &> /dev/null
     out_mat_B=$out_dir/$r/gw/APA.txt
-    mv "$out_mat_B" "$out_dir"/APA_raw_${version_dir_B}.txt
+    mv "$out_mat_B" "$out_dir"/APA_raw_${hic_B_basename}.txt
 
     #----------------------------------
 
 
-    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$version_dir_A.txt > "$out_dir"/APA_formatted_$version_dir_A.txt
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$hic_A_basename.txt > "$out_dir"/APA_formatted_$hic_A_basename.txt
 
-    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$version_dir_B.txt > "$out_dir"/APA_formatted_$version_dir_B.txt
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$hic_B_basename.txt > "$out_dir"/APA_formatted_$hic_B_basename.txt
 
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$version_dir_A.txt" "$out_dir/APA_formatted_$version_dir_B.txt" "${version_dir_A}" "${version_dir_B}" "${c}" "${d}" $"$out_dir/${version_dir_A}_v_${version_dir_B}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$hic_A_basename.txt" "$out_dir/APA_formatted_$hic_B_basename.txt" "${hic_A_basename}" "${hic_B_basename}" "${c}" "${d}" $"$out_dir/${hic_A_basename}_v_${hic_B_basename}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
-    rm "$out_dir"/APA_raw_$version_dir_A.txt
-    rm "$out_dir"/APA_raw_$version_dir_B.txt
-    rm "$out_dir"/APA_formatted_$version_dir_A.txt
-    rm "$out_dir"/APA_formatted_$version_dir_B.txt
+    rm "$out_dir"/APA_raw_$hic_A_basename.txt
+    rm "$out_dir"/APA_raw_$hic_B_basename.txt
+    rm "$out_dir"/APA_formatted_$hic_A_basename.txt
+    rm "$out_dir"/APA_formatted_$hic_B_basename.txt
 
 fi
