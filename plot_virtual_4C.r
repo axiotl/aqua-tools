@@ -151,7 +151,7 @@ draw_title <- function(
     interval_end) {
   
   if (analysis_type == "single_sample") {
-    sample_name <- basename(sample_dir)
+    sample_name <- basename(path_hic)
     title <- sprintf(
       "Sample: %s\n\nRange: %s:%d-%d | Genome Build: %s | Resolution: %s",
       sample_name,
@@ -162,8 +162,8 @@ draw_title <- function(
       bin_size
     )
   } else if (analysis_type == "two_sample") {
-    sample_nameA <- basename(sample_dirA)
-    sample_nameB <- basename(sample_dirB)
+    sample_nameA <- basename(path_hic_A)
+    sample_nameB <- basename(path_hic_B)
     title <- sprintf(
       "Delta = \n%s - \n%s\n\nRange: %s:%d-%d | Genome Build: %s | Resolution: %s",
       sample_nameB, sample_nameA,
@@ -306,7 +306,7 @@ draw_viewpoints <- function( A, C, left_side, viewpoint_start, height, analysis_
         if( i == viewpoint_bin_idx && j == ncol(A) ){
 
           side                  <- left_side
-          profile_height_scale  <- height
+          profile_height_scale  <- (height/4)
 
           coordinates <- matrix(nrow=nrow(A), ncol=4) ; colnames(coordinates) <- c("x0","y0","x1","y1")
 
