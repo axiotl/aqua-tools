@@ -33,11 +33,10 @@ AQuA tools `annotate_clusters`, `plot_contacts` and `extract_bedpe` will be inco
 ### Tinker
 [Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
 
-**Key Features:**
-- No installation required and immeditely accessible via browser
+- No needed installation  and immeditely accessible via browser
 - Access to a collection of reference datasets and invariant genome annotations
-- Access to all tools, including `annotate_clusters`, `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
-- Faster outputs for large `build_bedpe` calls
+- Access to all tools
+- Faster outputs for large `query_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Pro which additionally comes with:
 - **Collaborative Features**: Share files and analyses with team members
