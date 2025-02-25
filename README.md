@@ -1,6 +1,6 @@
 # AQuA-Tools
 
-[![License](https://img.shields.io/github/license/yourusername/aqua-tools)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 ## Table of Contents
 - [About](#about)
@@ -275,5 +275,8 @@ plot_APA \
 ```
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+AQuA tools is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License v3.0.
+The full license text can be found in the [LICENSE.md](LICENSE.md) file.
 
+### Note for Commercial Users
+For commercial licensing options, please contact hello@axiotl.com.
