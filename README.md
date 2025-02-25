@@ -88,12 +88,16 @@ sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
 
 **Note**: Keep all outputs in `~/container_outputs` to access them after exiting the container.
 
-### Local 
-A subset of AQuA Tools can work directly on your local machine. 
+### Local
+While we recommend using Tinker or Docker for the complete AQuA-Tools experience, a subset of tools can be installed locally. Follow these instructions to set up AQuA-Tools on your system.
 
-AQuA tools require the following shell dependencies-
+#### Prerequisites
+- Linux-based operating system (Ubuntu 18.04+ or similar)
+- R (version 4.0.0+)
+- Sufficient disk space (~1GB for tools and dependencies)
+
 ```bash
-apt update && apt install -y \
+sudo apt update && sudo apt install -y \
     openjdk-8-jdk \
     openjdk-8-jre \
     software-properties-common \
@@ -103,11 +107,8 @@ apt update && apt install -y \
     bedtools \
     bc \
     gnupg
-```
 
-AQuA tools require the following R dependencies-
-```r
-Rscript --slave --no-save --no-restore-history -e '
+Rscript -e '
     install.packages(
         c(
             "data.table",
@@ -122,20 +123,18 @@ Rscript --slave --no-save --no-restore-history -e '
             "dbscan",
             "igraph"
         ),
-        repos = "http://www.freestatistics.org/cran/"
+        repos = "http://cran.us.r-project.org"
     )
-'
 
-Rscript --slave --no-save --no-restore-history -e '
+    # Install straw from GitHub
     if (!requireNamespace("remotes", quietly = TRUE)) {
-        install.packages("remotes", repos = "http://www.freestatistics.org/cran/")
+        install.packages("remotes", repos = "http://cran.us.r-project.org")
     }
     remotes::install_github("aidenlab/straw/R")
-'
 
-Rscript --slave --no-save --no-restore-history -e '
+    # Install Bioconductor packages
     if (!requireNamespace("BiocManager", quietly = TRUE)) {
-        install.packages("BiocManager", repos = "http://www.freestatistics.org/cran/")
+        install.packages("BiocManager", repos = "http://cran.us.r-project.org")
     }
     BiocManager::install(c(
         "GenomicRanges",
@@ -144,6 +143,25 @@ Rscript --slave --no-save --no-restore-history -e '
         "S4Vectors"
     ))
 '
+```
+#### Download and install AQuA tools
+```
+cd $HOME
+
+wget -O latest_aqua_tools.zip "https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip" && \
+    unzip latest_aqua_tools.zip && \
+    mv aqua-tools-main aqua_tools && \
+    rm latest_aqua_tools.zip
+
+echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
+    echo "alias build_bedpe='$HOME/aqua_tools/build_bedpe.sh'" >> $HOME/.bashrc && \
+    echo "alias cluster_bedpe='$HOME/aqua_tools/cluster_bedpe.sh'" >> $HOME/.bashrc && \
+    echo "alias union_bedpe='$HOME/aqua_tools/union_bedpe.sh'" >> $HOME/.bashrc && \
+    echo "alias intersect_bedpe='$HOME/aqua_tools/intersect_bedpe.sh'" >> $HOME/.bashrc && \
+    echo "alias list_tools='$HOME/aqua_tools/list_tools.sh'" >> $HOME/.bashrc && \
+    echo "alias plot_APA='$HOME/aqua_tools/plot_APA.sh'" >> $HOME/.bashrc && \
+    echo "alias plot_virtual_4C='$HOME/aqua_tools/plot_virtual_4C.sh'" >> $HOME/.bashrc
+
 ```
 
 ## Recipes
