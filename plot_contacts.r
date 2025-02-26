@@ -333,15 +333,16 @@ draw_bed <- function(bed_file, color, depth, flag_text) {
       # Set gene name and coordinate sizes
       if (exists("pairs") && nrow(pairs) > 0 &&
           is_gene_in_bedpe(b$start, b$end, pairs)) {
-        gene_cex  <- 0.21   
+        gene_cex  <- 0.25   
         coord_cex <- 0.08
+        colour <- "#ef0000"
       } else {
-        gene_cex  <- 0.13
+        gene_cex  <- 0.10
         coord_cex <- 0.05
-        color <- "#777777"
+        colour <- "#aaaaaa"
       }
       
-      draw_feature_2(b$chr, b$start, b$end, label_txt, color, current_offset,
+      draw_feature_2(b$chr, b$start, b$end, label_txt, color=colour, current_offset,
                      flag_text = TRUE, gene_cex = gene_cex, coord_cex = coord_cex)
     }
   }
