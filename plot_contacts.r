@@ -338,6 +338,7 @@ draw_bed <- function(bed_file, color, depth, flag_text) {
       } else {
         gene_cex  <- 0.13
         coord_cex <- 0.05
+        color <- "#777777"
       }
       
       draw_feature_2(b$chr, b$start, b$end, label_txt, color, current_offset,
