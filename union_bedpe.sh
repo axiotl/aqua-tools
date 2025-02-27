@@ -12,7 +12,7 @@ function no_sigint {
 
     let ctrlc_count++
     if [[ $ctrlc_count == 1 ]]; then
-        sudo rm -rf $temp_dir
+        rm -rf $temp_dir
     else
         :
     fi
@@ -123,4 +123,4 @@ final_output="${output_file}"
 cat "$final_output" | uniq
 
 
-trap "sudo rm -rf $temp_dir" EXIT
+trap "rm -rf $temp_dir" EXIT
