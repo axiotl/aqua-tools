@@ -62,8 +62,8 @@ function help {
     echo "   -A|--bed_A          : Path to the first bed file"
     echo "   -B|--bed_B          : Path to the second bed file"
     echo "  [-T|--TAD          ] : Path to the TAD file (to restrict pairings outside of the TAD)"
-    echo "  [-d|--min_dist     ] : Minimum distance between pairs used to drop results. Default 0 bp"
-    echo "  [-D|--max_dist     ] : Maximum distance between pairs used to drop results. Default 5 Mb"
+    echo "  [-d|--min_dist     ] : Minimum distance between pairs used to drop results. Default 0"
+    echo "  [-D|--max_dist     ] : Maximum distance between pairs used to drop results. Default 5000000"
     echo "  [-t|--get_trans    ] : If TRUE, prints trans pairs only. Default FALSE"
     echo "  [-h|--help         ]   Help message"
     exit;
@@ -121,186 +121,187 @@ do
     esac
 done
 
+# -----------------------------------------
+# Parameter checks
+
+if [ ! -f "$A" ]; then
+  echo -e "\nFile '$A' does not exist." >&2
+  exit 1
+fi
+
+if [ ! -f "$B" ]; then
+  echo -e "\nFile '$B' does not exist." >&2
+  exit 1
+fi
+
+if [[ "$T" != "NULL" ]] && [ ! -f "$T" ]; then
+  echo -e "\nTAD file '$T' does not exist." >&2
+  exit 1
+fi
+
+# Check that d and D are numeric
+if ! [[ "$d" =~ ^[0-9]+$ ]]; then
+  echo -e "\nMinimum distance (-d) must be numeric only (e.g., 0, 100, 100000)" >&2
+  exit 1
+fi
+
+if ! [[ "$D" =~ ^[0-9]+$ ]]; then
+  echo -e "\nMaximum distance (-D) must be numeric only (e.g., 0, 100, 100000)" >&2
+  exit 1
+fi
+
+# Helpful message in edge cases
+if [[ "$d" -ge "$D" ]]; then
+  echo -e "\nMinimum distance (d=$d) must be less than maximum distance (D=$D)" >&2
+  exit 1
+fi
 
 if [[ "$d" -lt 0 ]]; then 
-    echo "min dist cannot be less than 0"
-    exit 1
+  echo "min dist cannot be less than 0"
+  exit 1
 fi
 
 if [[ "$t" != "TRUE" && "$t" != "FALSE" ]]; then 
-    echo "--get_trans can either be TRUE or FALSE"
-    exit 1
+  echo "--get_trans can either be TRUE or FALSE"
+  exit 1
 fi
 
+if [[ "$T" != "NULL" ]] && [[ "$t" == "TRUE" ]]; then
+  echo -e "\nCannot use a TAD (-T) file for trans pairs (-t TRUE)" >&2
+  exit 1
+fi
 
-
-
+# -----------------------------------------
 
 if [[ $t == "FALSE" ]]; then
-   if [[ $T == "NULL" ]]; then
+    if [[ $T == "NULL" ]]; then
+        awk -v D="$D" -v d="$d" '
+        BEGIN { OFS=FS="\t" }
+        {
+            original_2 = $2;
+            original_3 = $3;
+            $2 = $2 - D; if ($2 < 1) $2 = 1;
+            $3 = original_2 - d; if ($3 < 1) $3 = 1;
+            print $0, $1, original_2, original_3;
+        }' "$B" > "$temp_dir/file_b1.bed"
 
-       awk -v D="$D" -v d="$d" '
-       BEGIN {
-          OFS=FS="\t";
-       }
-       {
-           original_2 = $2;
-           original_3 = $3;
+        awk -v D="$D" -v d="$d" '
+        BEGIN { OFS=FS="\t" }
+        {
+            original_2 = $2;
+            original_3 = $3;
+            $2 = $2 + d; if ($2 < 1) $2 = 1;
+            $3 = original_2 + D; if ($3 < 1) $3 = 1;
+            print $0, $1, original_2, original_3;
+        }' "$B" > "$temp_dir/file_b2.bed"
 
-           $2 = $2 - D;
-           if ($2 < 1) $2 = 1;
+        bedtools intersect -a "$A" -b "$temp_dir/file_b1.bed" -wa -wb > "$temp_dir/intersect_left.bedpe"
+        bedtools intersect -a "$A" -b "$temp_dir/file_b2.bed" -wa -wb > "$temp_dir/intersect_right.bedpe"
 
+        num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
+        num_columns_B=$(awk -F'\t' 'NR==1 {print NF; exit}' "$B")
+        ml=$((num_columns_A - 3))
+        mr=$((num_columns_B - 3))
 
-           $3 = original_2 - d;
-           if ($3 < 1) $3 = 1;
+        cat "$temp_dir/intersect_left.bedpe" "$temp_dir/intersect_right.bedpe" > "$temp_dir/intersected_file.bedpe"
 
-           print $0, $1, original_2, original_3;
-       }' $B > $temp_dir/file_b1.bed
+        cat "$temp_dir/intersected_file.bedpe" | 
+        awk -v ml="$ml" -v mr="$mr" 'BEGIN {OFS="\t"} {
+            # Print A columns
+            for (i=1; i<=3; i++) {
+                printf $i OFS
+            }
+            # Print C columns
+            for (i=7+ml+mr; i<=9+ml+mr; i++) {
+                printf $i OFS
+            }
+            # Print A-meta columns
+            if (ml > 0) {
+                for (i=4; i<=3+ml; i++) {
+                    printf $i OFS
+                }
+            }
+            # Print B-meta columns
+            if (mr > 0) {
+                for (i=7+ml; i<=6+ml+mr; i++) {
+                    printf $i OFS
+                }
+            }
+            printf "\n"
+        }' "$temp_dir/intersected_file.bedpe" > "$temp_dir/desired_file.bedpe"
 
+        # Process the desired_file.bedpe to enforce the distance constraints
+        awk -v d="$d" -v D="$D" 'BEGIN { OFS="\t" } {
+            diff = ($5 > $2 ? $5 - $2 : $2 - $5);
+            if (diff >= d && diff <= D)
+                print $0;
+        }' "$temp_dir/desired_file.bedpe" | uniq | filter_duplicate_feet
 
-       awk -v D="$D" -v d="$d" '
-       BEGIN {
-           OFS=FS="\t";
-       }
-       {
-           original_2 = $2;
-           original_3 = $3;
+    elif [[ $T != "NULL" ]]; then
 
-           $2 = $2 + d;
-           if ($2 < 1) $2 = 1;
+        num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
+        num_columns_B=$(awk -F'\t' 'NR==1 {print NF; exit}' "$B")
+        num_columns_T=$(awk -F'\t' 'NR==1 {print NF; exit}' "$T")
 
-           $3 = original_2 + D;
-           if ($3 < 1) $3 = 1;
+        ma=$((num_columns_A - 3))
+        mb=$((num_columns_B - 3))
+        mt=$((num_columns_T - 3))
 
-           print $0, $1, original_2, original_3;
-       }' $B > $temp_dir/file_b2.bed
+        bedtools intersect -a "$T" -b "$A" -wa -wb -F 1 | \
+        awk -v n="$num_columns_T" 'BEGIN {OFS="\t"} {printf $1"_"$2"_"$3 OFS; for (i=n+1; i<=NF; i++) printf $i OFS; print ""}' | \
+        sort -k1,1 > "$temp_dir/temp_bed_A.bed"
 
+        bedtools intersect -a "$T" -b "$B" -wa -wb -F 1 | \
+        awk -v n="$num_columns_T" 'BEGIN {OFS="\t"} {printf $1"_"$2"_"$3 OFS; for (i=n+1; i<=NF; i++) printf $i OFS; print ""}' | \
+        sort -k1,1 > "$temp_dir/temp_bed_B.bed"
 
-       bedtools intersect -a $A -b $temp_dir/file_b1.bed -wa -wb > $temp_dir/intersect_left.bedpe
-       bedtools intersect -a $A -b $temp_dir/file_b2.bed -wa -wb > $temp_dir/intersect_right.bedpe
+        join -t $'\t' -j 1 "$temp_dir/temp_bed_A.bed" "$temp_dir/temp_bed_B.bed" | \
+        awk 'BEGIN {OFS="\t"} {$1=$1; print}' | \
+        cut -f 2- | \
+        awk -v ml="$ma" -v mr="$mb" 'BEGIN {OFS="\t"} {
+            # Print A columns (chrom, start, end)
+            for (i=1; i<=3; i++) {
+                printf $i OFS
+            }
+            # Print B columns (positions 4+ml to 6+ml)
+            for (i=4+ml; i<=6+ml; i++) {
+                printf $i OFS
+            }
+            # Print A-meta columns
+            if (ml > 0) {
+                for (i=4; i<=3+ml; i++) {
+                    printf $i OFS
+                }
+            }
+            # Print B-meta columns
+            if (mr > 0) {
+                for (i=7+ml; i<=6+ml+mr; i++) {
+                    printf $i OFS
+                }
+            }
+            printf "\n"
+        }' | uniq | filter_duplicate_feet > "$temp_dir/tad_output.bedpe"
 
-       num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
-       num_columns_B=$(awk -F'\t' 'NR==1 {print NF; exit}' "$B")
+        # If non-default distance constraints are specified, apply additional filtering
+        if [ "$d" -ne 0 ] || [ "$D" -ne 5000000 ]; then
+            awk -v d="$d" -v D="$D" 'BEGIN { OFS="\t" } {
+                diff = ($5 > $2 ? $5 - $2 : $2 - $5);
+                if (diff >= d && diff <= D)
+                    print $0;
+            }' "$temp_dir/tad_output.bedpe" | uniq | filter_duplicate_feet
+        else
+            cat "$temp_dir/tad_output.bedpe"
+        fi
 
-       ml=$((num_columns_A - 3))
-       mr=$((num_columns_B - 3))
+    fi
 
+elif [[ $t == "TRUE" ]]; then
 
-       cat $temp_dir/intersect_left.bedpe $temp_dir/intersect_right.bedpe > $temp_dir/intersected_file.bedpe
-
-       cat $temp_dir/intersected_file.bedpe | 
-       awk -v ml=$ml -v mr=$mr 'BEGIN {OFS="\t"} {
-           # Print A columns
-           for (i=1; i<=3; i++) {
-               printf $i OFS
-           }
-        
-           # Print C columns
-           for (i=7+ml+mr; i<=9+ml+mr; i++) {
-               printf $i OFS
-           }
-        
-           # Print A-meta columns
-           if (ml > 0) {
-               for (i=4; i<=3+ml; i++) {
-                   printf $i OFS
-               }
-           }
-        
-           # Print B-meta columns
-           if (mr > 0) {
-               for (i=7+ml; i<=6+ml+mr; i++) {
-                   printf $i OFS
-               }
-           }
-        
-           printf "\n"
-       }' $temp_dir/intersected_file.bedpe > $temp_dir/desired_file.bedpe
-       
-       # Process the desired_file.bedpe to enforce the distance constraints
-       awk -v d=$d -v D=$D 'BEGIN { OFS="\t" } {
-          # Calculate the absolute difference between the start positions in columns 2 and 5
-          diff = ($5 > $2 ? $5 - $2 : $2 - $5);
-
-          # Print the line only if the difference is within the specified constraints
-          if (diff >= d && diff <= D) {
-          print $0;
-          }
-    }' $temp_dir/desired_file.bedpe | \
-    uniq | filter_duplicate_feet
-
-fi
-
-
-   if [[ $T != "NULL" ]]; then
-    
-    
-       num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
-       num_columns_B=$(awk -F'\t' 'NR==1 {print NF; exit}' "$B")
-       num_columns_T=$(awk -F'\t' 'NR==1 {print NF; exit}' "$T")
-
-       ma=$((num_columns_A - 3))
-       mb=$((num_columns_B - 3))
-       mt=$((num_columns_T - 3))
-    
-
-       bedtools intersect -a $T -b $A -wa -wb -F 1 | \
-       awk -v n=$num_columns_T 'BEGIN {OFS="\t"} {printf $1"_"$2"_"$3 OFS; for (i=n+1; i<=NF; i++) printf $i OFS; print ""}' | \
-       sort -k1,1 > $temp_dir/temp_bed_A.bed
-
-       bedtools intersect -a $T -b $B -wa -wb -F 1 | \
-       awk -v n=$num_columns_T 'BEGIN {OFS="\t"} {printf $1"_"$2"_"$3 OFS; for (i=n+1; i<=NF; i++) printf $i OFS; print ""}' | \
-       sort -k1,1 > $temp_dir/temp_bed_B.bed
-
-       join -t $'\t' -j 1 $temp_dir/temp_bed_A.bed $temp_dir/temp_bed_B.bed |
-
-       awk 'BEGIN {OFS="\t"} {$1=$1; print}' | \
-       cut -f 2- | \
-       awk -v ml=$ma -v mr=$mb 'BEGIN {OFS="\t"} {
-           # Print A columns
-           for (i=1; i<=3; i++) {
-               printf $i OFS
-           }
-        
-           # Print C columns
-           for (i=4+ml; i<=6+ml; i++) {
-               printf $i OFS
-           }
-        
-           # Print A-meta columns
-           if (ml > 0) {
-               for (i=4; i<=3+ml; i++) {
-                   printf $i OFS
-               }
-           }
-        
-           # Print B-meta columns
-           if (mr > 0) {
-               for (i=7+ml; i<=6+ml+mr; i++) {
-                   printf $i OFS
-               }
-           }
-        
-           printf "\n"
-       }' | \
-       uniq | filter_duplicate_feet
-   fi
-
-fi
-
-
-
-
-if [[ $t == "TRUE" ]]; then
-    
-    
     num_columns_A=$(awk -F'\t' 'NR==1 {print NF; exit}' "$A")
     num_columns_B=$(awk -F'\t' 'NR==1 {print NF; exit}' "$B")
-
     ma=$((num_columns_A - 3))
     mb=$((num_columns_B - 3))
     
-
     chroms1=$(awk '{print $1}' "$A" | sort -u)
     chroms2=$(awk '{print $1}' "$B" | sort -u)
 
@@ -325,7 +326,6 @@ if [[ $t == "TRUE" ]]; then
             fi
         done
     done
-
 
 fi
 
