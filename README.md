@@ -147,6 +147,8 @@ Rscript -e '
 ```
 cd $HOME
 
+wget https://s3.amazonaws.com/hicfiles.tc4ga.com/public/juicer/juicer_tools_1.19.02.jar
+
 wget -O latest_aqua_tools.zip "https://github.com/axiotl/aqua-tools/archive/refs/heads/main.zip" && \
     unzip latest_aqua_tools.zip && \
     mv aqua-tools-main aqua_tools && \
@@ -159,7 +161,8 @@ echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
     echo "alias intersect_bedpe='$HOME/aqua_tools/intersect_bedpe.sh'" >> $HOME/.bashrc && \
     echo "alias list_tools='$HOME/aqua_tools/list_tools.sh'" >> $HOME/.bashrc && \
     echo "alias plot_APA='$HOME/aqua_tools/plot_APA.sh'" >> $HOME/.bashrc && \
-    echo "alias plot_virtual_4C='$HOME/aqua_tools/plot_virtual_4C.sh'" >> $HOME/.bashrc
+    echo "alias plot_virtual_4C='$HOME/aqua_tools/plot_virtual_4C.sh'" >> $HOME/.bashrc && \
+    echo "export juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar" >> $HOME/.bashrc
 
 ```
 
