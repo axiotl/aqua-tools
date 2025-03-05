@@ -77,12 +77,12 @@ cd $working_dir                         # <-- place the Dockerfile from GitHub i
 
 #### Step 2: Build the image
 ```bash
-sudo docker build -t aqua_tools .       # This can take up to 30 minutes
+docker build -t aqua_tools .       # This can take up to 30 minutes
 ```
 
 #### Step 3: Run the container
 ```bash
-sudo docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
+docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
 ```
 
 **Note**: Keep all outputs in `~/container_outputs` to access them after exiting the container.
@@ -222,6 +222,7 @@ plot_contacts \
  --genome $genome \
  --range $range \
  --bedpe $output_dir/MYC.bedpe \
+ --resolution 10000 \
  --output_name $output_dir/MYC.pdf
 ```
 
