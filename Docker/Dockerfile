@@ -25,9 +25,6 @@ RUN apt update && apt install -y \
     apt update && apt install -y r-base && \
     apt clean && rm -rf /var/lib/apt/lists/* 
 
-RUN apt install -y sudo && \
-    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
 # Install R and CRAN packages
 RUN Rscript --slave --no-save --no-restore-history -e 'install.packages(\
   c("data.table", "ggplot2", "dplyr", "tidyr", "remotes", "parallel", \
