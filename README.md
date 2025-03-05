@@ -199,6 +199,8 @@ extract_bedpe \
 
 #### Loop calling genome-wide:
 ```bash
+# This can take up to 30 minutes
+
 sample=K562_H3K27ac
 genome=hg38
 output_dir=/home/ubuntu/container_outputs
