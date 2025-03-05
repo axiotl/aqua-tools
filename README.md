@@ -288,13 +288,15 @@ plot_APA \
  --bedpe loop-gains.bedpe \
  --sample1 $sample1 \
  --sample2 $sample2 \
- --out-dir $(pwd)
+ --genome $genome_build \
+ --out-dir ~/container_outputs/gains
 
 plot_APA \
  --bedpe loop-losses.bedpe \
  --sample1 $sample1 \
  --sample2 $sample2 \
- --out-dir $(pwd)
+ --genome $genome_build \
+ --out-dir ~/container_outputs/losses
 ```
 
 ## License
