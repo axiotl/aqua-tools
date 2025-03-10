@@ -247,13 +247,15 @@ extract_bedpe \
  --sample1 $sample1 \
  --genome $genome_build \
  --TAD $TAD_file \
- --resolution $resolution > "$sample1"_gw-loops_"$genome_build".bedpe
+ --resolution $resolution \
+ --min_dist 15000 > "$sample1"_gw-loops_"$genome_build".bedpe
 
 extract_bedpe \
  --sample1 $sample2 \
  --genome $genome_build \
  --TAD $TAD_file \
- --resolution $resolution > "$sample2"_gw-loops_"$genome_build".bedpe
+ --resolution $resolution \
+ --min_dist 15000 > "$sample2"_gw-loops_"$genome_build".bedpe
 ```
 #### Merge the called genome-wide loops into one file
 ```
