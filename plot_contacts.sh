@@ -97,7 +97,7 @@ for arg in "$@"; do
       "--quant_cut")                    set -- "$@" "-q" ;;
       "--max_cap")                      set -- "$@" "-m" ;;
       "--get_matrix")                   set -- "$@" "-D" ;;
-      "--bedpe")                        set -- "$@" "-b" ;;
+      "--bedpe")                        set -- "$@" "-P" ;;
       "--bedpe_color")                  set -- "$@" "-y" ;;
       "--inherent")                     set -- "$@" "-i" ;;
       "--inh_col_floor")                set -- "$@" "-K" ;;
@@ -122,7 +122,7 @@ c=NONE
 q=1
 m=none
 D=FALSE
-b=FALSE
+P=FALSE
 y=000000
 i="FALSE"
 w="blank"
@@ -136,7 +136,7 @@ f=0
 prefix="_"
 
 # Process all arguments
-while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:b:y:i:K:L:M:N:w:g:T:f:h" OPT
+while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:P:y:i:K:L:M:N:w:g:T:f:h" OPT
 do
   case $OPT in
     A) A=$OPTARG;;
@@ -169,7 +169,7 @@ do
     q) q=$OPTARG;;
     m) m=$OPTARG;;
     D) D=$OPTARG;;
-    b) b=$OPTARG;;
+    P) P=$OPTARG;;
     y) y=$OPTARG;;
     i) i=$OPTARG;;
     K) K=$OPTARG;;
@@ -510,14 +510,14 @@ fi
 
 
 # Check bedpe
-if [ "$b" = "FALSE" ]; then
+if [ "$P" = "FALSE" ]; then
     echo -e "No BEDPE file supplied to highlight contact plot\n"
 else
     # Check if file exists
-    if [ ! -f "$b" ]; then
-        echo "BEDPE file $b does not exist. It will be skipped."
+    if [ ! -f "$P" ]; then
+        echo "BEDPE file $P does not exist. It will be skipped."
         echo
-        b="FALSE"
+        P="FALSE"
     else
     # Check number of columns and coordinate ordering
         awk_output=$(awk '
@@ -540,14 +540,14 @@ else
                 exit 1
             }
             exit 0
-        }' "$b")
+        }' "$P")
         
         # Check the exit status of awk
         if [ $? -ne 0 ]; then
             echo "$awk_output"
-            echo "Continuing without --bedpe $b ..."
+            echo "Continuing without --bedpe $P ..."
             echo
-            b="FALSE"
+            P="FALSE"
         fi
     fi
 fi
@@ -659,7 +659,7 @@ fi
     $Q \
     $q \
     $O \
-    $b \
+    $P \
     $y \
     $i \
     $sample_dir \
@@ -791,7 +791,7 @@ then
     $Q \
     $q \
     $O \
-    $b \
+    $P \
     $y \
     $w \
     $sample_dirA $sample_dirB \
