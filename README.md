@@ -167,7 +167,7 @@ echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
 ```
 
 ## Recipes
-All AQuA tools are executable from anywhere inside the container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
+All AQuA tools are executable from anywhere inside the Docker container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
 Detailed material on how to use the tools can be found at our [Docs](https://docs.axiotl.com/).
 
 ### Getting Started
