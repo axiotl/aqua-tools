@@ -494,7 +494,7 @@ if [ "$two_sample" == "TRUE" ] ; then
 
     # https://github.com/aidenlab/juicer/wiki/APA
 
-    echo -e "\nBeginning APA for sample A...\n"
+    echo -e "\nBeginning APA...\n"
 
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
     out_mat_A="$out_dir/$r/gw/APA.txt"
@@ -504,8 +504,6 @@ if [ "$two_sample" == "TRUE" ] ; then
         echo -e "\nAPA failed for sample A (no output file produced). Please check input files and parameters.\n"
         exit 1
     fi
-
-    echo -e "\nBeginning APA for sample B...\n"
 
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$tmp_binified" "$out_dir" &> /dev/null
     out_mat_B="$out_dir/$r/gw/APA.txt"
