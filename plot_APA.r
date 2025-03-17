@@ -238,8 +238,7 @@ if( length(Args) == 14 ) {
 
     dev.off()
  
-    full_path <- file.path(getwd(), out_dir)
-    cat("\nOutput folder created at", full_path, "\n\n") 
+    cat("\nOutput folder created at", out_dir, "\n\n") 
 
 }
 
@@ -251,7 +250,6 @@ if( length(Args) == 14 ) {
 ###                                                                     ###
 ###########################################################################
 ###########################################################################
-
 
 if(length(Args) == 17) {
 
@@ -304,7 +302,6 @@ if(length(Args) == 17) {
   total2        <- sum(hg_total2, mm_total2)
   norm_factor2  <- 1000000 / total2
   aqua_factor2  <- hg_total2 / mm_total2
-
 
   if( ! flag_norm %in% c("blank",  "none", "cpm", "aqua" ) ){
     cat("Norm should strictly be none, cpm or aqua in lower case \n")
@@ -503,7 +500,6 @@ if(length(Args) == 17) {
 
   dev.off()
 
-  full_path <- file.path(getwd(), out_dir)
-  cat("\nOutput folder created at", full_path, "\n\n")  
+  cat("\nOutput folder created at", out_dir, "\n\n")  
 
 }
