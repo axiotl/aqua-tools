@@ -118,6 +118,11 @@ then
     exit
 fi
 
+if [[ ! -f "$P" ]]; then
+    echo "\n'$P' is not a valid file\n"
+    exit
+fi
+
 #----------------------------------
 
 if [[ -z $G ]];
@@ -130,14 +135,24 @@ fi
 
 # Validate sample1/hic1 inputs
 if [[ -z "$A" && "$H" == "blank" ]]; then
-    echo "No sample1 or hic1 provided. Exiting."
+    echo -e "\nNo sample1 or hic1 provided. Exiting.\n"
     usage
     exit 1
 fi
 
 if [[ ! -z "$A" && "$H" != "blank" ]]; then
-    echo "Need either sample1 name or hic1 path, not both. Exiting."
+    echo -e "\nNeed either sample1 name or hic1 path, not both. Exiting.\n"
     usage
+    exit 1
+fi
+
+if [[ ! -z "$A" && "$A" == *.hic ]]; then
+    echo -e "\n-A is for sample folders on Tinker. Did you mean to use the --hic1 option instead?\n"
+    exit 1
+fi
+
+if [[ "$H" != "blank" && "$H" != *.hic ]]; then
+    echo -e "\nFile '$H' is not a .hic file type. Please provide a valid .hic file.\n"
     exit 1
 fi
 
@@ -166,6 +181,15 @@ col4="${col4:0:3}"
 if [[ $col1 != "$col4"  ]]; then
 echo "Please provide a 6-col bedpe file without headers"
 exit
+fi
+
+first_line=$(head -n 1 "$P")
+chr1=$(echo "$first_line" | awk '{print $1}')
+chr2=$(echo "$first_line" | awk '{print $4}')
+
+if [ "$chr1" != "$chr2" ]; then
+  echo "APA statistics are not designed for interchromosomal regions, for more information see https://github.com/aidenlab/juicer/wiki/APA"
+  exit 1
 fi
 
 #----------------------------------
@@ -337,6 +361,34 @@ else
     Q="blank"
 fi
 
+#---------------Binify-------------------
+
+# Create temporary files in /tmp
+tmp_trimmed=$(mktemp /tmp/trimmed_bedpe.XXXXXX)
+tmp_binified=$(mktemp /tmp/binified_bedpe.XXXXXX)
+
+# Create 6 col bedpe
+cut -f1-6 "$P" > "$tmp_trimmed"
+
+awk -v r="$r" 'BEGIN { OFS="\t" }
+{
+  if ((($3 - $2) < r) || (($6 - $5) < r)) {
+    # If either interval is too short to bin, output the original coordinates
+    print $1, $2, $3, $4, $5, $6;
+  } else {
+    end1_adj = $3 - r;
+    end2_adj = $6 - r;
+    for (i = $2; i <= end1_adj; i += r) {
+      for (j = $5; j <= end2_adj; j += r) {
+        print $1, i, i + r, $4, j, j + r;
+      }
+    }
+  }
+}' "$tmp_trimmed" > "$tmp_binified"
+
+
+# Convert tmp_binified to absolute path
+tmp_binified=$(readlink -f "$tmp_binified")
 
 
 ###########################################################################
@@ -377,19 +429,33 @@ if [ "$two_sample" == "FALSE" ] ; then
     echo -e "\nBeginning APA...\n"
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
 
-    # Copying the generated APA.txt to APA_raw.txt
     out_mat=$out_dir/$r/gw/APA.txt
-    mv "$out_mat" "$out_dir"/APA_raw.txt
+    
+    # Check expected file exists before attempting to move
+    if [ -f "$out_mat" ]; then
+        mv "$out_mat" "$out_dir/APA_raw.txt"
+    else
+        echo -e "\nAPA failed (no output file produced). Please check input files and parameters.\n"
+        exit 1
+    fi
 
 
     awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw.txt > "$out_dir"/APA_formatted.txt
 
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${hic_basename}" "${c}" "${d}" "$out_dir/${hic_basename}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
+    matrix_sum=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted.txt")
+    if [ "$matrix_sum" -eq 0 ]; then
+        echo "APA matrix is all zeros - no valid contacts were detected."
+        exit 1
+    fi
+    
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${hic_basename}" "${c}" "${d}" "$out_dir/${hic_basename}_APA.pdf" ${win_size} "${r}" "${tmp_binified}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
     rm "$out_dir"/APA_raw.txt
     rm "$out_dir"/APA_formatted.txt
+    rm "$tmp_trimmed"
+    rm "$tmp_binified"
 
 fi
 
@@ -406,8 +472,6 @@ fi
 
 
 if [ "$two_sample" == "TRUE" ] ; then
-
-    # Do all necessary parameter checks
 
     num_loops=`cat "$P" | wc -l`
 
@@ -430,15 +494,27 @@ if [ "$two_sample" == "TRUE" ] ; then
 
     # https://github.com/aidenlab/juicer/wiki/APA
 
-    echo -e "\nBeginning APA...\n"
+    echo -e "\nBeginning APA for sample A...\n"
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
-    out_mat_A=$out_dir/$r/gw/APA.txt
-    mv "$out_mat_A" "$out_dir"/APA_raw_${hic_A_basename}.txt
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
+    out_mat_A="$out_dir/$r/gw/APA.txt"
+    if [ -f "$out_mat_A" ]; then
+        mv "$out_mat_A" "$out_dir/APA_raw_${hic_A_basename}.txt"
+    else
+        echo -e "\nAPA failed for sample A (no output file produced). Please check input files and parameters.\n"
+        exit 1
+    fi
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$P" "$out_dir" &> /dev/null
-    out_mat_B=$out_dir/$r/gw/APA.txt
-    mv "$out_mat_B" "$out_dir"/APA_raw_${hic_B_basename}.txt
+    echo -e "\nBeginning APA for sample B...\n"
+
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$tmp_binified" "$out_dir" &> /dev/null
+    out_mat_B="$out_dir/$r/gw/APA.txt"
+    if [ -f "$out_mat_B" ]; then
+        mv "$out_mat_B" "$out_dir/APA_raw_${hic_B_basename}.txt"
+    else
+        echo -e "\nAPA failed for sample B (no output file produced). Please check input files and parameters\n"
+        exit 1
+    fi
 
     #----------------------------------
 
@@ -447,7 +523,17 @@ if [ "$two_sample" == "TRUE" ] ; then
 
     awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$hic_B_basename.txt > "$out_dir"/APA_formatted_$hic_B_basename.txt
 
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$hic_A_basename.txt" "$out_dir/APA_formatted_$hic_B_basename.txt" "${hic_A_basename}" "${hic_B_basename}" "${c}" "${d}" $"$out_dir/${hic_A_basename}_v_${hic_B_basename}_APA.pdf" ${win_size} "${r}" "${P}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
+    # Sum values in each formatted matrix
+    matrix_sum_A=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${hic_A_basename}.txt")
+    matrix_sum_B=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${hic_B_basename}.txt")
+
+    # Check if both matrices are all zeros
+    if [ "$matrix_sum_A" -eq 0 ] && [ "$matrix_sum_B" -eq 0 ]; then
+        echo "Both APA matrices are all zeros - no valid contacts were detected."
+        exit 1
+    fi
+
+    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$hic_A_basename.txt" "$out_dir/APA_formatted_$hic_B_basename.txt" "${hic_A_basename}" "${hic_B_basename}" "${c}" "${d}" $"$out_dir/${hic_A_basename}_v_${hic_B_basename}_APA.pdf" ${win_size} "${r}" "${tmp_binified}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
@@ -455,5 +541,7 @@ if [ "$two_sample" == "TRUE" ] ; then
     rm "$out_dir"/APA_raw_$hic_B_basename.txt
     rm "$out_dir"/APA_formatted_$hic_A_basename.txt
     rm "$out_dir"/APA_formatted_$hic_B_basename.txt
+    rm "$tmp_binified"
+    rm "$tmp_trimmed"
 
 fi
