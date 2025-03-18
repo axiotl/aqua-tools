@@ -229,18 +229,17 @@ draw_scale_inh <- function(
 }
 
 
-# Determine if a gene overlaps any BEDPE region
 is_gene_in_bedpe <- function(gene_start, gene_end, pairs) {
   if (!is.data.frame(pairs) || nrow(pairs) == 0) {
     return(FALSE)
   }
   
   for (p in seq_len(nrow(pairs))) {
-    # Define region 1 and region 2 for this BEDPE pair
-    region1_start <- pairs$start1_bin[p]
-    region1_end   <- pairs$end1_bin[p]
-    region2_start <- pairs$start2_bin[p]
-    region2_end   <- pairs$end2_bin[p]
+    # Use the original coordinates
+    region1_start <- pairs$start1[p]
+    region1_end   <- pairs$end1[p]
+    region2_start <- pairs$start2[p]
+    region2_end   <- pairs$end2[p]
     
     # Check if the gene overlaps region 1
     if (gene_end >= region1_start && gene_start <= region1_end) {
