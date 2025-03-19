@@ -198,7 +198,7 @@ if (isTRUE(absence)) {
     if (isFALSE(print_bed)) {
       non_intersect_ids <- intersect(foot1$ID, foot2$ID)
       if (length(non_intersect_ids) > 0) {
-        invisible(apply(original_bedpe[non_intersect_ids, ], 1, function(x) cat(paste(x, collapse = "\t"), "\n")))
+        invisible(apply(original_bedpe[non_intersect_ids, ], 1, function(x) cat(paste(x, collapse = "\t"), "\n", sep = "")))
       } else {
         cat("\nThere are no non-intersecting rows in the BEDPE file.\n")
         quit(save="no")
