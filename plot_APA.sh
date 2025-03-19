@@ -192,6 +192,11 @@ if [ "$chr1" != "$chr2" ]; then
   exit 1
 fi
 
+if [[ "$first_line" =~ [[:space:]]+$ ]]; then
+  echo "Trailing whitespace detected on the first line of the bedpe file. Please remove trailing spaces."
+  exit 1
+fi
+
 #----------------------------------
 
 
