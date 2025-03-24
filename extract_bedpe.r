@@ -2,15 +2,17 @@ suppressPackageStartupMessages(library(strawr))
 suppressPackageStartupMessages(library(GenomicRanges))
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(dbscan))
+suppressPackageStartupMessages(library(dplyr))
 
 options(stringsAsFactors = FALSE)
 options(scipen = 999)
 options(warn = -1 )
 
+
+
 args           <- commandArgs( trailingOnly = TRUE )
+
 analysis_type  <<- args[1]
-
-
 
 zero_diag <- function(
     matrix,
@@ -37,7 +39,6 @@ if(analysis_type == "range"){
   ##                          Arguments                          ##
   #################################################################
   
-  
   path_hic   <- args[2]
   chr        <- as.character(args[3])
   start      <- as.numeric(args[4])
@@ -48,7 +49,6 @@ if(analysis_type == "range"){
   radius     <- as.character(args[9])
   mode       <- as.character(args[10])
   min_dist   <- as.numeric(args[11])
-  
   norm  <- "NONE"
   unit  <- "BP"
   
@@ -58,11 +58,6 @@ if(analysis_type == "range"){
   
   if( any( grepl( "chr", chr, ignore.case = T ) ) == FALSE ){
     cat("\n  Please add 'chr' prefix for chromosome\n")
-    quit(save="no")
-  }
-
-  if( end - start > 5000000 ){
-    cat("\n  Please keep loop search space within 5Mb\n")
     quit(save="no")
   }
   
@@ -98,7 +93,7 @@ if(analysis_type == "range"){
   if(nrow(sparMat)==0){
     q( save = "no" )
   }
-
+  
   if (flag_strip_chr) {
     interval_chr <- paste0("chr", interval_chr)
   }
@@ -189,10 +184,9 @@ if(analysis_type == "range"){
     }
   }
   
-  A <- zero_diag(A,1)
   
   if(mode == "loop"){
-    
+    A <- zero_diag(A,1)
     A[A < score] <- 0
     
     if(sum(A)>0){
@@ -229,7 +223,7 @@ if(analysis_type == "range"){
   }
   
   if(mode == "glob"){
-    
+    A <- zero_diag(A,1)
     A[A < score] <- 0
     
     if(sum(A)>0){
@@ -271,7 +265,7 @@ if(analysis_type == "range"){
               end2    = end2 + bin_size,
               #cluster = cluster,
               stringsAsFactors = FALSE)
-
+            
             bedpe <- rbind(bedpe, loops)
           }
           
@@ -297,12 +291,252 @@ if(analysis_type == "range"){
   }
   
   if(mode == "flare"){
-    cat("Under development, use --mode loop\n")
-    q(save = "no")
+    A <- zero_diag(A,1)
+    
+    A[A < score] <- 0
+    
+    if(sum(A)>0){
+      
+      A[A>0] <- 1
+      
+      
+      df <- which(A > 0, arr.ind = T)
+      real_df = data.frame(row = df[,"row"], col = df[,"col"], step = rownames(df))
+      df_ordered <- real_df[order(real_df$row), ]
+      
+      
+      
+      # Combine rows where col differs by parameter radius
+      result <- df_ordered %>%
+        arrange(row, col) %>% # Ensure data is ordered by row and col
+        group_by(row) %>%
+        mutate(group = cumsum(c(1, diff(col) > radius))) %>% # Create groups where col differs by more than 2
+        group_by(row, group) %>%
+        summarise(
+          start_col = min(col),      # Keep the smallest col in the group
+          end_col = max(col),        # Keep the largest col in the group
+          step = first(step),        # Keep the first step value
+          combined_count = n(),       # Count how many rows were combined
+          .groups = "drop" # Suppresses the warning
+        ) %>%
+        ungroup() %>%
+        mutate(end_row = row) %>%    # Add an end_row column (equal to start row)
+        select(row, start_col, end_col, step, combined_count, end_row) # Rearrange columns
+      
+      
+      # Step 2: Combine rows where start_col and end_col are the same and row differs by less-than parameter radius
+      final_result <- result %>%
+        arrange(start_col, end_col, row) %>%
+        group_by(start_col, end_col) %>%
+        mutate(row_group = cumsum(c(1, diff(row) > radius))) %>%
+        group_by(start_col, end_col, row_group) %>%
+        summarise(
+          start_row = min(row),
+          end_row = max(row),
+          start_col = first(start_col),
+          end_col = first(end_col),
+          step = first(step),
+          combined_count = first(combined_count),          # Sum of combined rows
+          combined_count_row = n(),                       # Number of rows combined in this step
+          .groups = "drop" # Suppresses the warning
+        ) %>%
+        ungroup() %>%
+        select(start_row, end_row, start_col, end_col, step, combined_count, combined_count_row)
+      
+      final_result = final_result %>% arrange(start_row)
+      for( i in 1:nrow(final_result)){
+        iter = final_result[i,]
+        loops <- data.frame(
+          chr1   = as.character(interval_chr),
+          start1 = as.numeric(rownames(A)[iter$start_row]), #   as.numeric(rownames(A)[df[i,1]]),
+          end1   = as.numeric(rownames(A)[iter$start_row]) + bin_size*iter$combined_count_row,
+          chr2   = as.character(interval_chr),
+          start2 = as.numeric(rownames(A)[iter$start_col]),
+          end2   = as.numeric(rownames(A)[iter$start_col]) + bin_size*iter$combined_count,
+          score  = round(mean(A[iter$start_row: (iter$start_row+ iter$combined_count_row-1),
+                                iter$start_col: (iter$start_col+iter$combined_count-1)]),3),
+          stringsAsFactors = FALSE)
+        
+        # loops <- loops[loops$start2 - loops$start1 >= min_dist,]
+        
+        if(nrow(loops)>0){
+          try(cat( paste( loops[,1:6], collapse = "\t"), "\n", sep = "" ), silent=TRUE)
+        }
+        
+      }
+      
+    } else {
+      trap <- 1 # do nothing
+    }
+    
+    
+  }
+  if(mode == "minimal"){
+    
+    A[A < score] <- 0
+    
+    if(sum(A) > 0){
+      
+      high_score = score + 3 * score / 7 # Default 1 for score = 0.7
+      
+      A[A > 0 & A < high_score ] <- 1
+      A[A > high_score ] <- 2
+      
+      
+      df <- which(A > 0, arr.ind = T)
+      indices <- which(A > 0, arr.ind = TRUE)
+      
+      # Extract the values from A corresponding to these indices
+      values <- A[indices]
+      df <- data.frame(row = indices[, 1], col = indices[, 2], value = values)
+      
+      unique_elements <- unique(c(df$row, df$col))
+      # Initialize a vector to store the sums
+      # Count the number of 1s and 2s for each element
+      # Initialize a data frame to store the results
+      result_df <- data.frame(
+        element = unique_elements,
+        count_1 = 0,  # Column for counting 1s
+        count_2 = 0   # Column for counting 2s
+      )
+      
+      for (element in unique_elements) {
+        # Count 1s where the element appears in the row
+        count_1_row <- sum(df$value[df$row == element] == 1)
+        # Count 1s where the element appears in the column
+        count_1_col <- sum(df$value[df$col == element] == 1)
+        # Total count of 1s for the element
+        result_df$count_1[result_df$element == element] <- count_1_row + count_1_col
+        # Count 2s where the element appears in the row
+        count_2_row <- sum(df$value[df$row == element] == 2)
+        # Count 2s where the element appears in the column
+        count_2_col <- sum(df$value[df$col == element] == 2)
+        # Total count of 2s for the element
+        result_df$count_2[result_df$element == element] <- count_2_row + count_2_col
+      }
+      result_df$count_sum = result_df$count_1 + 2* result_df$count_2 #  %>% arrange()
+      
+      result_df = result_df %>% arrange(-count_sum)
+      
+      result_df$prop_count_sum = result_df$count_sum  / max(result_df$count_sum )
+      
+      # Assign diagonal values if the element is on the diagonal
+      for (element in unique_elements) {
+        if (element <= nrow(A) && element <= ncol(A)) {  # Ensure within matrix bounds
+          result_df$diagonal_value[result_df$element == element] <- A[element, element]
+        }
+      }
+      
+      # Get the top-1 element
+      top_1_element <- result_df$element[1]
+      
+      # Identify neighbors (2 before, 1 before, 1 after, 2 after)
+      all_elements <- result_df$element
+      top_1_index <- which(all_elements == top_1_element)
+      neighbors <- c(top_1_element-2, top_1_element-1, top_1_element+1, top_1_element+2)  # all_elements[pmax(1, top_1_index - 2):pmin(length(all_elements), top_1_index + 2)]
+      
+
+      # remove edge cases end and start -----------------------------------------
+      neighbors = neighbors[neighbors > 0 & neighbors <= nrow(A)]
+      
+      l_neigh = length(neighbors) +1
+      
+      # Initialize new columns
+      result_df$direct_connection <- 0  # "1" or "2" if direct connection to top-1
+      result_df$neighborhood_1 <- 0  # "1" if at least one connection with a neighbor for 1
+      result_df$neighborhood_2 <- 0  # "1" if at least one connection with a neighbor for 2
+      
+      # Loop over all elements in result_df
+      for (element in all_elements) {
+        if (element == top_1_element) next  # Skip the top-1 itself
+        
+        # Check direct connection to top-1
+        if (A[element, top_1_element] == 1 || A[top_1_element, element] == 1) {
+          result_df$direct_connection[result_df$element == element] <- 1
+        } else if (A[element, top_1_element] == 2 || A[top_1_element, element] == 2) {
+          result_df$direct_connection[result_df$element == element] <- 2
+        }
+        
+        # Check connections with neighbors
+        for (neighbor in neighbors) {
+          if (neighbor == element) next  # Skip itself
+          
+          if (A[element, neighbor] == 1 || A[neighbor, element] == 1) {
+            result_df$neighborhood_1[result_df$element == element] <- result_df$neighborhood_1[result_df$element == element]+1
+          }
+          if (A[element, neighbor] == 2 || A[neighbor, element] == 2) {
+            result_df$neighborhood_2[result_df$element == element] <- result_df$neighborhood_2[result_df$element == element]+1
+          }
+        }
+      }
+      
+      
+      
+      # Omnicomprehensive score ----------------------------------------------------
+      
+      # A bit of magic numbers..
+      result_df$score = 5*result_df$prop_count_sum + result_df$diagonal_value + result_df$direct_connection + result_df$neighborhood_1 / (2*l_neigh) + result_df$neighborhood_2 / l_neigh
+      result_df$score[1] = result_df$score[1] + 4 ## comes out on top.  
+      
+      # Filter: filtering element with a neighbor with higher score, or with very low number of contacts
+      # Identify elements to remove
+      up_df <- result_df %>%
+        rowwise() %>%
+        mutate(has_higher_adjacent = any(result_df$score[result_df$element %in% c(element - 1, element - 2, element + 1, element + 2)] > score),
+               has_double_higher_adjacent = any(result_df$score[result_df$element %in% c(element - 1, element - 2, element + 1, element + 2)] > 2*score),
+               has_low_interactions = prop_count_sum < 0.2,
+               has_very_low_interactions = prop_count_sum < 0.05) %>%
+        ungroup() 
+      
+      
+      # remove individual with either very low adj or very low contacts --------
+      removed_df = up_df %>%
+        filter(!has_double_higher_adjacent) %>%
+        filter(!has_very_low_interactions)  %>%
+        filter(! (has_higher_adjacent | has_low_interactions) ) ## This is the difference between High cut or normal
+      
+      # Extract interactions only between non-removed loci ----------------------------------------------------
+      A <- zero_diag(A,1)
+      smallerA = A[sort(removed_df$element),sort(removed_df$element)]
+      
+      if(sum(smallerA)>0){
+        
+        smallerA[smallerA>0] <- 1
+        
+        
+        df <- which(smallerA > 0, arr.ind = T)
+        
+        for( i in 1:nrow(df)){
+          
+          loops <- data.frame(
+            chr1   = as.character(interval_chr),
+            start1 = as.numeric(rownames(smallerA)[df[i,1]]),
+            end1   = as.numeric(rownames(smallerA)[df[i,1]]) + bin_size,
+            chr2   = as.character(interval_chr),
+            start2 = as.numeric(rownames(smallerA)[df[i,2]]),
+            end2   = as.numeric(rownames(smallerA)[df[i,2]]) + bin_size,
+            score  = round(smallerA[df[i,1],df[i,2]],3),
+            stringsAsFactors = FALSE)
+          
+          loops <- loops[loops$start2 - loops$start1 >= min_dist,]
+          
+          if(nrow(loops)>0){
+            try(cat( paste( loops[,1:6], collapse = "\t"), "\n", sep = "" ), silent=TRUE)
+          }
+          
+        }
+        
+      } else {
+        trap <- 1 # do nothing
+      }
+      
+      
+      
+      
+    }
   }
   
 }
-
 
 if(analysis_type == "TAD"){
   
@@ -371,11 +605,6 @@ if(analysis_type == "TAD"){
   power_laws      <- power_laws[power_laws$res == bin_size,]
   
   
-  if(mode == "flare"){
-    cat("Under development, use loop\n")
-    q(save = "no")
-  }
-  
   
   for(tad in 1:nrow(tads)){
     
@@ -403,9 +632,9 @@ if(analysis_type == "TAD"){
     if(nrow(sparMat)==0){
       next
     }
-
+    
     if (flag_strip_chr) {
-        interval_chr <- paste0("chr", interval_chr)
+      interval_chr <- paste0("chr", interval_chr)
     }
     
     tad_matrix <- matrix(
@@ -467,9 +696,10 @@ if(analysis_type == "TAD"){
       }
     }
     
-    A <- zero_diag(A,1)
     
     if(mode == "loop"){
+      A <- zero_diag(A,1)
+      
       A[A < score] <- 0
       
       if(sum(A)>0){
@@ -490,7 +720,7 @@ if(analysis_type == "TAD"){
             stringsAsFactors = FALSE )
           
           loops <- loops[loops$start2 - loops$start1 >= min_dist,]
-
+          
           
           if(nrow(loops)>0){
             try(cat( paste( loops[,1:6], collapse = "\t"), "\n", sep = "" ), silent=TRUE)
@@ -505,6 +735,8 @@ if(analysis_type == "TAD"){
     }
     
     if(mode == "glob"){
+      A <- zero_diag(A,1)
+      
       A[A < score] <- 0
       
       if(sum(A)>0){
@@ -546,7 +778,7 @@ if(analysis_type == "TAD"){
                 end2    = end2 + bin_size,
                 #cluster = cluster,
                 stringsAsFactors = FALSE)
-
+              
               
               bedpe <- rbind(bedpe, loops)
             }
@@ -573,7 +805,249 @@ if(analysis_type == "TAD"){
       }
     }
     
-    
+    if(mode == "flare"){
+      A <- zero_diag(A,1)
+      
+      A[A < score] <- 0
+      
+      if(sum(A)>0){
+        
+        A[A>0] <- 1
+        
+        
+        df <- which(A > 0, arr.ind = T)
+        real_df = data.frame(row = df[,"row"], col = df[,"col"], step = rownames(df))
+        df_ordered <- real_df[order(real_df$row), ]
+        
+        
+        
+        # Combine rows where col differs by parameter radius
+        result <- df_ordered %>%
+          arrange(row, col) %>% # Ensure data is ordered by row and col
+          group_by(row) %>%
+          mutate(group = cumsum(c(1, diff(col) > radius))) %>% # Create groups where col differs by more than 2
+          group_by(row, group) %>%
+          summarise(
+            start_col = min(col),      # Keep the smallest col in the group
+            end_col = max(col),        # Keep the largest col in the group
+            step = first(step),        # Keep the first step value
+            combined_count = n(),       # Count how many rows were combined
+            .groups = "drop" # Suppresses the warning
+          ) %>%
+          ungroup() %>%
+          mutate(end_row = row) %>%    # Add an end_row column (equal to start row)
+          select(row, start_col, end_col, step, combined_count, end_row) # Rearrange columns
+        
+        
+        # Step 2: Combine rows where start_col and end_col are the same and row differs by less-than parameter radius
+        final_result <- result %>%
+          arrange(start_col, end_col, row) %>%
+          group_by(start_col, end_col) %>%
+          mutate(row_group = cumsum(c(1, diff(row) > radius))) %>%
+          group_by(start_col, end_col, row_group) %>%
+          summarise(
+            start_row = min(row),
+            end_row = max(row),
+            start_col = first(start_col),
+            end_col = first(end_col),
+            step = first(step),
+            combined_count = first(combined_count),          # Sum of combined rows
+            combined_count_row = n(),                       # Number of rows combined in this step
+            .groups = "drop" # Suppresses the warning
+          ) %>%
+          ungroup() %>%
+          select(start_row, end_row, start_col, end_col, step, combined_count, combined_count_row)
+        
+        final_result = final_result %>% arrange(start_row)
+        for( i in 1:nrow(final_result)){
+          iter = final_result[i,]
+          loops <- data.frame(
+            chr1   = as.character(interval_chr),
+            start1 = as.numeric(rownames(A)[iter$start_row]), #   as.numeric(rownames(A)[df[i,1]]),
+            end1   = as.numeric(rownames(A)[iter$start_row]) + bin_size*iter$combined_count_row,
+            chr2   = as.character(interval_chr),
+            start2 = as.numeric(rownames(A)[iter$start_col]),
+            end2   = as.numeric(rownames(A)[iter$start_col]) + bin_size*iter$combined_count,
+            score  = round(mean(A[iter$start_row: (iter$start_row+ iter$combined_count_row-1),
+                                  iter$start_col: (iter$start_col+iter$combined_count-1)]),3),
+            stringsAsFactors = FALSE)
+          
+          # loops <- loops[loops$start2 - loops$start1 >= min_dist,]
+          
+          if(nrow(loops)>0){
+            try(cat( paste( loops[,1:6], collapse = "\t"), "\n", sep = "" ), silent=TRUE)
+          }
+          
+        }
+        
+      } else {
+        trap <- 1 # do nothing
+      }
+      
+      
+    }
+    if(mode == "minimal"){
+      
+      A[A < score] <- 0
+      
+      if(sum(A) > 0){
+        
+        high_score = score + 3 * score / 7 # Default 1 for score = 0.7
+        
+        A[A > 0 & A < high_score ] <- 1
+        A[A > high_score ] <- 2
+        
+        
+        df <- which(A > 0, arr.ind = T)
+        indices <- which(A > 0, arr.ind = TRUE)
+        
+        # Extract the values from A corresponding to these indices
+        values <- A[indices]
+        df <- data.frame(row = indices[, 1], col = indices[, 2], value = values)
+        
+        unique_elements <- unique(c(df$row, df$col))
+        # Initialize a vector to store the sums
+        # Count the number of 1s and 2s for each element
+        # Initialize a data frame to store the results
+        result_df <- data.frame(
+          element = unique_elements,
+          count_1 = 0,  # Column for counting 1s
+          count_2 = 0   # Column for counting 2s
+        )
+        
+        for (element in unique_elements) {
+          # Count 1s where the element appears in the row
+          count_1_row <- sum(df$value[df$row == element] == 1)
+          # Count 1s where the element appears in the column
+          count_1_col <- sum(df$value[df$col == element] == 1)
+          # Total count of 1s for the element
+          result_df$count_1[result_df$element == element] <- count_1_row + count_1_col
+          # Count 2s where the element appears in the row
+          count_2_row <- sum(df$value[df$row == element] == 2)
+          # Count 2s where the element appears in the column
+          count_2_col <- sum(df$value[df$col == element] == 2)
+          # Total count of 2s for the element
+          result_df$count_2[result_df$element == element] <- count_2_row + count_2_col
+        }
+        result_df$count_sum = result_df$count_1 + 2* result_df$count_2 #  %>% arrange()
+        
+        result_df = result_df %>% arrange(-count_sum)
+        
+        result_df$prop_count_sum = result_df$count_sum  / max(result_df$count_sum )
+        
+        # Assign diagonal values if the element is on the diagonal
+        for (element in unique_elements) {
+          if (element <= nrow(A) && element <= ncol(A)) {  # Ensure within matrix bounds
+            result_df$diagonal_value[result_df$element == element] <- A[element, element]
+          }
+        }
+        
+        # Get the top-1 element
+        top_1_element <- result_df$element[1]
+        
+        # Identify neighbors (2 before, 1 before, 1 after, 2 after)
+        all_elements <- result_df$element
+        top_1_index <- which(all_elements == top_1_element)
+        neighbors <- c(top_1_element-2, top_1_element-1, top_1_element+1, top_1_element+2)  # all_elements[pmax(1, top_1_index - 2):pmin(length(all_elements), top_1_index + 2)]
+        
+        neighbors = neighbors[neighbors > 0 & neighbors <= nrow(A)]
+        
+        l_neigh = length(neighbors) +1
+        
+        # Initialize new columns
+        result_df$direct_connection <- 0  # "1" or "2" if direct connection to top-1
+        result_df$neighborhood_1 <- 0  # "1" if at least one connection with a neighbor for 1
+        result_df$neighborhood_2 <- 0  # "1" if at least one connection with a neighbor for 2
+        
+        # Loop over all elements in result_df
+        for (element in all_elements) {
+          if (element == top_1_element) next  # Skip the top-1 itself
+          
+          # Check direct connection to top-1
+          if (A[element, top_1_element] == 1 || A[top_1_element, element] == 1) {
+            result_df$direct_connection[result_df$element == element] <- 1
+          } else if (A[element, top_1_element] == 2 || A[top_1_element, element] == 2) {
+            result_df$direct_connection[result_df$element == element] <- 2
+          }
+          
+          # Check connections with neighbors
+          for (neighbor in neighbors) {
+            if (neighbor == element) next  # Skip itself
+            
+            if (A[element, neighbor] == 1 || A[neighbor, element] == 1) {
+              result_df$neighborhood_1[result_df$element == element] <- result_df$neighborhood_1[result_df$element == element]+1
+            }
+            if (A[element, neighbor] == 2 || A[neighbor, element] == 2) {
+              result_df$neighborhood_2[result_df$element == element] <- result_df$neighborhood_2[result_df$element == element]+1
+            }
+          }
+        }
+        
+        
+        
+        # Omnicomprehensive score ----------------------------------------------------
+        
+        # A bit of magic numbers..
+        result_df$score = 5*result_df$prop_count_sum + result_df$diagonal_value + result_df$direct_connection + result_df$neighborhood_1 / (2*l_neigh) + result_df$neighborhood_2 / l_neigh
+        result_df$score[1] = result_df$score[1] + 4 ## comes out on top.  
+        
+        # Filter: filtering element with a neighbor with higher score, or with very low number of contacts
+        # Identify elements to remove
+        up_df <- result_df %>%
+          rowwise() %>%
+          mutate(has_higher_adjacent = any(result_df$score[result_df$element %in% c(element - 1, element - 2, element + 1, element + 2)] > score),
+                 has_double_higher_adjacent = any(result_df$score[result_df$element %in% c(element - 1, element - 2, element + 1, element + 2)] > 2*score),
+                 has_low_interactions = prop_count_sum < 0.2,
+                 has_very_low_interactions = prop_count_sum < 0.05) %>%
+          ungroup() 
+        
+        
+        # remove individual with either very low adj or very low contacts --------
+        removed_df = up_df %>%
+          filter(!has_double_higher_adjacent) %>%
+          filter(!has_very_low_interactions)  %>%
+          filter(! (has_higher_adjacent | has_low_interactions) ) ## This is the difference between High cut or normal
+        
+        # Extract interactions only between non-removed loci ----------------------------------------------------
+        A <- zero_diag(A,1)
+        smallerA = A[sort(removed_df$element),sort(removed_df$element)]
+        
+        if(sum(smallerA)>0){
+          
+          smallerA[smallerA>0] <- 1
+          
+          
+          df <- which(smallerA > 0, arr.ind = T)
+          
+          for( i in 1:nrow(df)){
+            
+            loops <- data.frame(
+              chr1   = as.character(interval_chr),
+              start1 = as.numeric(rownames(smallerA)[df[i,1]]),
+              end1   = as.numeric(rownames(smallerA)[df[i,1]]) + bin_size,
+              chr2   = as.character(interval_chr),
+              start2 = as.numeric(rownames(smallerA)[df[i,2]]),
+              end2   = as.numeric(rownames(smallerA)[df[i,2]]) + bin_size,
+              score  = round(smallerA[df[i,1],df[i,2]],3),
+              stringsAsFactors = FALSE)
+            
+            loops <- loops[loops$start2 - loops$start1 >= min_dist,]
+            
+            if(nrow(loops)>0){
+              try(cat( paste( loops[,1:6], collapse = "\t"), "\n", sep = "" ), silent=TRUE)
+            }
+            
+          }
+          
+        } else {
+          trap <- 1 # do nothing
+        }
+        
+        
+        
+        
+      }
+    }
   }
   
 }
