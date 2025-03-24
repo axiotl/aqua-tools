@@ -31,7 +31,7 @@ function help {
     echo "  [-r|--resolution   ] : Resolution in base pairs. Only 5000 and 1000 supported. Default 5000"
     echo "  [-T|--TAD          ] : Full path to TAD file, the boundaries of which will be used to obtain clusters"
     echo "  [-S|--score        ] : Inherent score to seed cluster formation. Default 0.7"
-    echo "  [-m|--mode         ] : Shape of bedpe to be called: loop, flare, or glob. Default glob"
+    echo "  [-m|--mode         ] : Shape of bedpe to be called: loop, flare, minimal or glob. Default glob"
     echo "  [   --radius       ] : Bin distance units to search for neighbours. Default 1"
     echo "  [   --min_dist     ] : Distance in basepairs to filter out extracted elements. Default 0"
     echo "  [-h|--help         ]   Help message"
@@ -157,8 +157,8 @@ if [ "$R" == "range"    ] && [ "$T" == "NULL"   ] ; then
 fi
 
 
-if [ "$m" != "loop" ] && [ "$m" != "flare" ] && [ "$m" != "glob" ]; then
-    echo "mode stritcly either loop, flare or glob"
+if [ "$m" != "loop" ] && [ "$m" != "flare" ] && [ "$m" != "glob" ] && [ "$m" != "minimal" ]; then
+    echo "mode stritcly either loop, flare, minimal or glob"
     exit 1
 fi
 
