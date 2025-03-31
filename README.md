@@ -242,6 +242,7 @@ resolution=5000
 TAD_file=~/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
 ```
 #### Call genome-wide loops for each sample
+NOTE: this step takes a while, therefore the genome-wide loop files below are already pre-comupted in ~/genome-wide_loops.
 ```
 extract_bedpe \
  --sample1 $sample1 \
