@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 OPTIND=1
 norm_method=NONE
 unit=BP
@@ -32,16 +31,16 @@ function help {
     echo "    -G|--genome             : Genome build used for sample processing"
     echo "    -R|--range              : The genomic range to plot in chr:start:end format; -R chr1:40280000:40530000"
     echo "    -V|--viewpoint          : The viewpoint to consider in chr:start format; -V chr1:40400000"
-    echo "  [    --hic1           ]   : If not using the tinkerbox, directly specify the full path to the .hic"
-    echo "  [ -B|--sample2        ]   : For two sample delta plots, name of the second sample"
-    echo "  [    --hic2           ]   : If not using the tinkerbox, directly specify the second .hic"
+    echo "  [ -B|--sample2        ]   : For two sample analyses, name of the second sample"
+    echo "  [    --sample1_dir    ]   : If not using the tinkerbox, specify the full path to the directory containing sample data"
+    echo "  [    --sample2_dir    ]   : For two sample analyses not on the tinkerbox, full path to the second sample directory"
     echo "  [ -Q|--norm           ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo "  [ -r|--resolution     ]   : Resolution of sample in basepairs. Default 5000"
     echo "  [ -O|--output_name    ]   : Optional name for the plot"
     echo "  [    --quant_cut      ]   : Cap matrix values at a given percentile (0.00-1.00). Default 1.00"
     echo "  [    --max_cap        ]   : Cap matrix values by adjusting the maximum value, modifying color intensity"
     echo "  [    --width          ]   : Number of bins up/downstream of viewpoint included in profile. Default 0"
-    echo "  [    --height         ]   : Numeric factor to control the height of the profile. Default 0.5"
+    echo "  [    --height         ]   : Value to control the height of the profile. Default calculated automatically"
     echo "  [ -i|--inherent       ]   : If TRUE, normalize using inherent normalization. Default FALSE"
     echo "  [    --inh_col_floor  ]   : Contact color for inherent values < 0, in RGB hexadecimal. Default FFFFFF"
     echo "  [    --inh_col_off    ]   : Contact color for inherent values ~ 0, in RGB hexadecimal. Default D4E4FB"
@@ -68,8 +67,8 @@ for arg in "$@"; do
       "--genome")       set -- "$@" "-G" ;;
       "--range")        set -- "$@" "-R" ;;
       "--viewpoint")    set -- "$@" "-V" ;;
-      "--hic1")         set -- "$@" "-H" ;;
-      "--hic2")         set -- "$@" "-I" ;;
+      "--sample1_dir")  set -- "$@" "-H" ;;
+      "--sample2_dir")  set -- "$@" "-I" ;;
       "--sample2")      set -- "$@" "-B" ;;
       "--norm")         set -- "$@" "-Q" ;;
       "--resolution")   set -- "$@" "-r" ;;
@@ -94,7 +93,7 @@ r=5000
 q=1
 m="none"
 w=0
-t=0.5
+t="blank"
 i="FALSE"
 K=ffffff
 L=d4e4fb
@@ -154,10 +153,9 @@ fi
 
 #-----------------------------------
 
-if [[ -z $G ]];
-then
+if [[ -n "$A" && -z "$G" ]]; then
   usage
-  exit
+  exit 1
 fi
 
 #----------------------------------
@@ -171,19 +169,39 @@ fi
 #----------------------------------
 
 
-
-# Validate sample1/hic1 inputs
+# Validate sample1 inputs
 if [[ -z "$A" && "$H" == "blank" ]]; then
-    echo "No sample1 or hic1 provided. Exiting."
+    echo "No sample provided. Exiting."
     usage
     exit 1
 fi
 
 if [[ ! -z "$A" && "$H" != "blank" ]]; then
-    echo "Need either sample1 name or hic1 path, not both. Exiting."
+    echo "Need either sample1 name or sample1 directory path, not both. Exiting."
     usage
     exit 1
 fi
+
+# Check if a directory was given to A
+if [[ "$A" == *"/"* ]]; then
+  echo "The -A parameter expects a sample name, not a path. Did you mean to use --sample1_dir?"
+  exit 1
+fi
+
+# If A is provided, then G must be one of the allowed values: hg38, hg19, or mm10
+if [[ -n "$A" ]]; then
+  if [[ "$G" != "hg38" && "$G" != "hg19" && "$G" != "mm10" ]]; then
+    echo "-G must be one of: hg38, hg19, or mm10."
+    exit 1
+  fi
+fi
+
+# Check for inherent normalization attempt with local samples
+if [[ -n "$H" && "$i" == "TRUE" ]]; then
+  echo -e "\n--inherent normalization is not compatible with local installation. Try tinker-public/Docker for access to inherent normalized public samples, or sign up for tinker-private to use inherent normalization with any sample. Continuing without --inherent TRUE..."
+  i="FALSE"
+fi
+
 
 # Initialize as single sample analysis
 two_sample=FALSE
@@ -191,7 +209,7 @@ two_sample=FALSE
 # Check sample2/hic2 inputs
 if [[ ! -z "$B" || "$I" != "blank" ]]; then
     if [[ ! -z "$B" && "$I" != "blank" ]]; then
-        echo "Need either sample2 name or hic2 path, not both. Exiting."
+        echo "Need either sample2 name or sample1 directory path, not both. Exiting."
         usage
         exit 1
     fi
@@ -247,119 +265,135 @@ fi
 }
 
 
+validate_samples_and_stats() {
+  local sample_dir_input="$1"  # either -H or -I value
+  local sample_label="$2"      # sample1 or sample2 label
+  local hic_path mgs_path sample_name
+  
+  # Validate that the directory exists
+  if [[ ! -d "$sample_dir_input" ]]; then
+      echo "Directory '$sample_dir_input' does not exist. Exiting."
+      exit 1
+  fi
 
-cat > /tmp/calculate_stats.r << 'EOF'
-suppressPackageStartupMessages(library(strawr))
-args <- commandArgs(trailingOnly = T)
-hic_file <- args[1] 
-sample   <- args[2]
-genome   <- args[3]
-chromosomes <- readHicChroms(hic_file)
-chromosomes <- chromosomes[chromosomes[,"length"] > 46000000,"name"]
-if("All" %in% chromosomes){
- chromosomes <- chromosomes[-(which(chromosomes == "All"))]}
-total_counts <- 0
-for(i in 1:length(chromosomes)){
- for(j in i:length(chromosomes)){
-   try({
-     mat <- straw("NONE", hic_file, chromosomes[i], chromosomes[j], "BP", 2500000)
-     count <- sum(mat[,"counts"])
-     total_counts <- total_counts + count
-   }, silent = TRUE)  
- }
+  # Extract sample name from the directory name
+  sample_name=$(basename "$sample_dir_input")
+  
+  # Define expected file paths
+  hic_path="${sample_dir_input}/${sample_name}.hic"
+  mgs_path="${sample_dir_input}/${sample_name}.mergeStats.txt"
+  
+  # Check if the .hic file exists
+  if [[ ! -f "$hic_path" ]]; then
+      echo "Missing .hic file: $hic_path"
+      exit 1
+  fi
+  
+  # Check if the mergeStats.txt file exists
+  if [[ ! -f "$mgs_path" ]]; then
+      echo "Missing mergeStats.txt file: $mgs_path"
+      exit 1
+  fi
+
+  # Check for the required row and count data columns
+  local valid_row num_fields data_columns
+  valid_row=$(grep "^valid_interaction_rmdup" "$mgs_path")
+  if [ -z "$valid_row" ]; then
+      echo "The mergeStats file ($mgs_path) does not contain the required row 'valid_interaction_rmdup'. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+  num_fields=$(echo "$valid_row" | awk -F'\t' '{print NF}')
+  data_columns=$(( num_fields - 1 ))
+  
+  # Check for at least one data column (human reads)
+  if [[ "$data_columns" -lt 1 ]]; then
+      echo "$mgs_path is not properly formatted. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+
+  # If aqua normalization is requested, check for a second data column (mouse reads)
+  if [[ "$Q" == "aqua" ]]; then
+      if [[ "$data_columns" -lt 2 ]]; then
+          echo "Aqua normalization requested, but the mergeStats file ($mgs_path) does not contain a column for mouse reads. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+          exit 1
+      fi
+  fi
+
+  # Return the values as _A or _B
+  if [ "$sample_label" == "sample1" ]; then
+      path_hic_A="$hic_path"
+      path_mgs_A="$mgs_path"
+      sample_dir_A="$sample_dir_input"
+  elif [ "$sample_label" == "sample2" ]; then
+      path_hic_B="$hic_path"
+      path_mgs_B="$mgs_path"
+      sample_dir_B="$sample_dir_input"
+  fi
 }
-interaction_types <- c("valid_interaction", "valid_interaction_rmdup", "trans_interaction", "cis_interaction", "cis_shortRange", "cis_longRange")
-values            <- c(total_counts, total_counts, "-", "-", "-", "-")
-mergeStats <- data.frame(interaction_type = interaction_types, values = as.character(values))
-header <- paste(sample, genome, sep = ".")
-cat("\t",header, "\n")
-for (row in 1:nrow(mergeStats)) {
- cat(paste(mergeStats[row, "interaction_type"], "\t", mergeStats[row, "values"]), "\n")
-}
-EOF
 
 
-
-if [ "$two_sample" == "FALSE" ] ; then
-
+if [ "$two_sample" == "FALSE" ]; then
     if [ "$H" == "blank" ]; then
-
-        # Update sample A
+        # Using sample A via sample name
         sample_dir_A=$(get_sample_directory "$A")
         if [ $? -eq 0 ]; then
             version_dir_A=$(basename "$sample_dir_A")
             base_dir_A=$(basename "$(dirname "$sample_dir_A")")
             A="${base_dir_A}/${version_dir_A}"
             sample_dir="$data_dir/$G/$A"
+            path_hic="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs="$data_dir/$G/$A/mergeStats.txt"
         else
             echo "Sample directory not found. Exiting."
             exit 1
         fi
+    else
+        # Use G if provided or set to placeholder value
+        G=${G:-"G"}
+        # Process -H as sample1 directory
+        validate_samples_and_stats "$H" "sample1"
+    fi
+fi
 
-        path_hic="$data_dir"/"$G"/"$A"/"${version_dir_A}".allValidPairs.hic
-        path_mgs="$data_dir"/"$G"/"$A"/mergeStats.txt 
-
-    else 
-
-        path_hic=$H
-        sample_dir=$(basename "$H")
-        Rscript /tmp/calculate_stats.r "$path_hic" "sample" "$G" > /tmp/mergeStats.txt
-        path_mgs=/tmp/mergeStats.txt
-
+if [ "$two_sample" == "TRUE" ]; then
+    # Handle first sample (A or H)
+    if [ "$H" == "blank" ]; then
+        sample_dir_A=$(get_sample_directory "$A")
+        if [ $? -eq 0 ]; then
+            version_dir_A=$(basename "$sample_dir_A")
+            base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+            A="${base_dir_A}/${version_dir_A}"
+            path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
+            sample_dir="$data_dir/$G/$A"
+        else
+            echo "Sample A directory not found. Exiting."
+            exit 1
+        fi
+    else
+        G=${G:-"G"}
+        validate_samples_and_stats "$H" "sample1"
     fi
 
+    # Handle second sample (B or I)
+    if [ "$I" == "blank" ]; then
+        sample_dir_B=$(get_sample_directory "$B")
+        if [ $? -eq 0 ]; then
+            version_dir_B=$(basename "$sample_dir_B")
+            base_dir_B=$(basename "$(dirname "$sample_dir_B")")
+            B="${base_dir_B}/${version_dir_B}"
+            path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
+            path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
+            sample_dir_A="$data_dir/$G/$A"
+            sample_dir_B="$data_dir/$G/$B"
+        else
+            echo "Sample B directory not found. Exiting."
+            exit 1
+        fi
+    else
+        validate_samples_and_stats "$I" "sample2"
+    fi
 fi
-
-
-if [ "$two_sample" == "TRUE" ] ; then
-   # Handle first sample (A or H)
-   if [ "$H" == "blank" ]; then
-       # Using sample A
-       sample_dir_A=$(get_sample_directory "$A")
-       if [ $? -eq 0 ]; then
-           version_dir_A=$(basename "$sample_dir_A")
-           base_dir_A=$(basename "$(dirname "$sample_dir_A")")
-           A="${base_dir_A}/${version_dir_A}"
-           path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
-           path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
-           sample_dir="$data_dir/$G/$A"
-       else
-           echo "Sample A directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic1
-       path_hic_A=$H
-       sample_dir_A=$(basename "$H")
-       Rscript /tmp/calculate_stats.r "$path_hic_A" "sample_A" "$G" > /tmp/mergeStats_A.txt
-       path_mgs_A=/tmp/mergeStats_A.txt
-   fi
-
-   # Handle second sample (B or I)
-   if [ "$I" == "blank" ]; then
-       # Using sample B
-       sample_dir_B=$(get_sample_directory "$B")
-       if [ $? -eq 0 ]; then
-           version_dir_B=$(basename "$sample_dir_B")
-           base_dir_B=$(basename "$(dirname "$sample_dir_B")")
-           B="${base_dir_B}/${version_dir_B}"
-           path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
-           path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
-           sample_dir_A="$data_dir/$G/$A"
-           sample_dir_B="$data_dir/$G/$B"
-       else
-           echo "Sample B directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic2
-       path_hic_B=$I
-       sample_dir_B=$(basename "$I")
-       Rscript /tmp/calculate_stats.r "$path_hic_B" "sample_B" "$G" > /tmp/mergeStats_B.txt
-       path_mgs_B=/tmp/mergeStats_B.txt
-   fi
-fi
-
 
 
 
@@ -398,10 +432,10 @@ if [ "$two_sample" == "FALSE" ]; then
   analysis_type="single_sample"
   echo -e "\nCommencing $analysis_type analysis"
 
-  pair1=$path_hic
+  pair1=$path_hic_A
   if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
   
-  stat1=$path_mgs
+  stat1=$path_mgs_A
   if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
   
@@ -414,13 +448,13 @@ if [ "$two_sample" == "FALSE" ]; then
   has_aqua=true
   total1=$hg_total1
   if [[ ! -z $mm_total1  ]];then
-    echo "We have spike-In"
+    echo "spike-in values detected"
     total1=`echo "$hg_total1+$mm_total1" | bc`
     aqua_factor1=`echo "scale=4;$hg_total1/$mm_total1" | bc`
   fi
   norm_factor1=`echo "scale=4;1000000/$total1" | bc`
   
-  echo -e "switching to R...\n"
+  echo -e "\nswitching to R...\n"
 
   Rscript $aqua_dir/plot_virtual_4C.r \
     $analysis_type \
@@ -439,7 +473,7 @@ if [ "$two_sample" == "FALSE" ]; then
     $t \
     $v_chr \
     $v_start \
-    $sample_dir \
+    $sample_dir_A \
     $i \
     $K \
     $L \
@@ -503,7 +537,7 @@ if [ "$two_sample" == "TRUE" ]; then
   total1=$hg_total1
   total2=$hg_total2
   if [[ ! -z $mm_total1 && ! -z $mm_total2 ]];then
-    echo "We have spike-In"
+    echo "spike-in values detected"
     total1=`echo "$hg_total1+$mm_total1" | bc`
     total2=`echo "$hg_total2+$mm_total2" | bc`
     aqua_factor1=`echo "scale=4;$hg_total1/$mm_total1" | bc`
@@ -550,18 +584,4 @@ if [ "$two_sample" == "TRUE" ]; then
   if [ $exit_status -eq 0 ] && [ -f "$O" ]; then
       echo -e "\nDone! Created $O\n"
   fi
-fi
-
-
-if [ -f "/tmp/calculate_stats.r" ]; then
-    rm /tmp/calculate_stats.r
-fi
-if [ -f "/tmp/mergeStats.txt" ]; then
-    rm /tmp/mergeStats.txt
-fi
-if [ -f "/tmp/mergeStats_A.txt" ]; then
-    rm /tmp/mergeStats_A.txt
-fi
-if [ -f "/tmp/mergeStats_B.txt" ]; then
-    rm /tmp/mergeStats_B.txt
 fi
