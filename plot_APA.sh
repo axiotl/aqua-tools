@@ -9,8 +9,7 @@ aqua_dir=$HOME/aqua_tools
 
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
-
-juicer_tools='java -jar /home/ubuntu/juicer_tools_1.19.02.jar'
+juicer_tools="java -jar $HOME/juicer_tools_1.19.02.jar"
 
 
 function usage {
@@ -29,10 +28,10 @@ function help {
     echo "    -P|--bedpe                  : Path to the bedpe file, without headers"
     echo "    -A|--sample1                : Name of the sample as it appears on the Tinkerbox"
     echo "    -G|--genome                 : Genome build used for sample processing"
-    echo " [     --hic1                ]  : If not using the tinkerbox, directly specify the full path to the .hic"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
     echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample"
-    echo " [     --hic2                ]  : If not using the tinkerbox, provide the path to the second .hic"
+    echo " [    --sample1_dir          ]  : If not using the tinkerbox, specify the full path to the directory containing sample data"
+    echo " [    --sample2_dir          ]  : If not using the tinkerbox, full path to the second sample directory"
     echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution          ]  : Bin size you want to use for the APA plots. Default 5000"
     echo " [     --max_cap             ]  : Upper limit of the plot range. Defaults to max bin value"
@@ -65,8 +64,8 @@ for arg in "$@"; do
       "--min_cap")              set -- "$@" "-e" ;;
       "--max_cap_delta")        set -- "$@" "-d" ;;
       "--loop_norm")            set -- "$@" "-l" ;;
-      "--hic1")                 set -- "$@" "-H" ;;
-      "--hic2")                 set -- "$@" "-I" ;;
+      "--sample1_dir")          set -- "$@" "-H" ;;
+      "--sample2_dir")          set -- "$@" "-I" ;;
       "--help")                 set -- "$@" "-h" ;;
        *)                       set -- "$@" "$arg"
   esac
@@ -125,35 +124,38 @@ fi
 
 #----------------------------------
 
-if [[ -z $G ]];
-then
+if [[ -n "$A" && -z "$G" ]]; then
   usage
-  exit
+  exit 1
 fi
 
 #----------------------------------
 
-# Validate sample1/hic1 inputs
+# Validate sample1 inputs
 if [[ -z "$A" && "$H" == "blank" ]]; then
-    echo -e "\nNo sample1 or hic1 provided. Exiting.\n"
+    echo "No sample provided. Exiting."
     usage
     exit 1
 fi
 
 if [[ ! -z "$A" && "$H" != "blank" ]]; then
-    echo -e "\nNeed either sample1 name or hic1 path, not both. Exiting.\n"
+    echo "Need either sample1 name or sample1 directory path, not both. Exiting."
     usage
     exit 1
 fi
 
-if [[ ! -z "$A" && "$A" == *.hic ]]; then
-    echo -e "\n-A is for sample folders on Tinker. Did you mean to use the --hic1 option instead?\n"
-    exit 1
+# Check if a path was given to A
+if [[ "$A" == *"/"* ]]; then
+  echo "The -A parameter expects a sample name, not a path. Did you mean to use --sample1_dir?"
+  exit 1
 fi
 
-if [[ "$H" != "blank" && "$H" != *.hic ]]; then
-    echo -e "\nFile '$H' is not a .hic file type. Please provide a valid .hic file.\n"
+# If A is provided, then G must be one of the allowed values: hg38, hg19, or mm10
+if [[ -n "$A" ]]; then
+  if [[ "$G" != "hg38" && "$G" != "hg19" && "$G" != "mm10" ]]; then
+    echo "-G must be one of: hg38, hg19, or mm10."
     exit 1
+  fi
 fi
 
 # Initialize as single sample analysis
@@ -228,115 +230,142 @@ get_sample_directory() {
     fi
 }
 
-cat > /tmp/calculate_stats.r << 'EOF'
-suppressPackageStartupMessages(library(strawr))
-args <- commandArgs(trailingOnly = T)
-hic_file <- args[1] 
-sample   <- args[2]
-genome   <- args[3]
-chromosomes <- readHicChroms(hic_file)
-chromosomes <- chromosomes[chromosomes[,"length"] > 46000000,"name"]
-if("All" %in% chromosomes){
- chromosomes <- chromosomes[-(which(chromosomes == "All"))]}
-total_counts <- 0
-for(i in 1:length(chromosomes)){
- for(j in i:length(chromosomes)){
-   try({
-     mat <- straw("NONE", hic_file, chromosomes[i], chromosomes[j], "BP", 2500000)
-     count <- sum(mat[,"counts"])
-     total_counts <- total_counts + count
-   }, silent = TRUE)  
- }
+
+
+validate_samples_and_stats() {
+  local sample_dir_input="$1"  # either -H or -I value
+  local sample_label="$2"      # sample1 or sample2 label
+  local hic_path mgs_path sample_name
+  
+  # Validate that the directory exists
+  if [[ ! -d "$sample_dir_input" ]]; then
+      echo "Directory '$sample_dir_input' does not exist. Exiting."
+      exit 1
+  fi
+
+  # Extract sample name from the directory name
+  sample_name=$(basename "$sample_dir_input")
+  
+  # Define expected file paths
+  hic_path="${sample_dir_input}/${sample_name}.hic"
+  mgs_path="${sample_dir_input}/${sample_name}.mergeStats.txt"
+  
+  # Check if the .hic file exists
+  if [[ ! -f "$hic_path" ]]; then
+      echo "Missing .hic file: $hic_path"
+      exit 1
+  fi
+  
+  # Check if the mergeStats.txt file exists
+  if [[ ! -f "$mgs_path" ]]; then
+      echo "Missing mergeStats.txt file: $mgs_path"
+      exit 1
+  fi
+
+  # Check for the required row and count data columns
+  local valid_row num_fields data_columns
+  valid_row=$(grep "^valid_interaction_rmdup" "$mgs_path")
+  if [ -z "$valid_row" ]; then
+      echo "The mergeStats file ($mgs_path) does not contain the required row 'valid_interaction_rmdup'. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+  num_fields=$(echo "$valid_row" | awk -F'\t' '{print NF}')
+  data_columns=$(( num_fields - 1 ))
+  
+  # Check for at least one data column (human reads)
+  if [[ "$data_columns" -lt 1 ]]; then
+      echo "$mgs_path is not properly formatted. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+
+  # If aqua normalization is requested, check for a second data column (mouse reads)
+  if [[ "$Q" == "aqua" ]]; then
+      if [[ "$data_columns" -lt 2 ]]; then
+          echo "Aqua normalization requested, but the mergeStats file ($mgs_path) does not contain a column for mouse reads. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+          exit 1
+      fi
+  fi
+
+  # Return the values as _A or _B
+  if [ "$sample_label" == "sample1" ]; then
+      path_hic_A="$hic_path"
+      path_mgs_A="$mgs_path"
+      sample_dir_A="$sample_dir_input"
+  elif [ "$sample_label" == "sample2" ]; then
+      path_hic_B="$hic_path"
+      path_mgs_B="$mgs_path"
+      sample_dir_B="$sample_dir_input"
+  fi
 }
-interaction_types <- c("valid_interaction", "valid_interaction_rmdup", "trans_interaction", "cis_interaction", "cis_shortRange", "cis_longRange")
-values            <- c(total_counts, total_counts, "-", "-", "-", "-")
-mergeStats <- data.frame(interaction_type = interaction_types, values = as.character(values))
-header <- paste(sample, genome, sep = ".")
-cat("\t",header, "\n")
-for (row in 1:nrow(mergeStats)) {
- cat(paste(mergeStats[row, "interaction_type"], "\t", mergeStats[row, "values"]), "\n")
-}
-EOF
 
-#----------------------------------
 
-if [ "$two_sample" == "FALSE" ] ; then
-
+if [ "$two_sample" == "FALSE" ]; then
     if [ "$H" == "blank" ]; then
-
-        # Update sample A
+        # Using sample A via sample name
         sample_dir_A=$(get_sample_directory "$A")
         if [ $? -eq 0 ]; then
             version_dir_A=$(basename "$sample_dir_A")
             base_dir_A=$(basename "$(dirname "$sample_dir_A")")
             A="${base_dir_A}/${version_dir_A}"
+            sample_dir="$data_dir/$G/$A"
+            path_hic="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs="$data_dir/$G/$A/mergeStats.txt"
+            basename=$version_dir_A
         else
             echo "Sample directory not found. Exiting."
             exit 1
         fi
-
-        path_hic="$data_dir"/"$G"/"$A"/"${version_dir_A}".allValidPairs.hic
-        path_mgs="$data_dir"/"$G"/"$A"/mergeStats.txt 
-        hic_basename=$(basename "$path_hic")
-
-    else 
-
-        path_hic=$H
-        hic_basename=$(basename "$H")
-        Rscript /tmp/calculate_stats.r "$path_hic" "sample" "$G" > /tmp/mergeStats.txt
-        path_mgs=/tmp/mergeStats.txt
-
+    else
+        # Use G if provided or set to placeholder value
+        G=${G:-"G"}
+        # Process -H as sample1 directory
+        validate_samples_and_stats "$H" "sample1"
+        basename=$(basename "$H")
     fi
-
 fi
 
+if [ "$two_sample" == "TRUE" ]; then
+    # Handle first sample (A or H)
+    if [ "$H" == "blank" ]; then
+        sample_dir_A=$(get_sample_directory "$A")
+        if [ $? -eq 0 ]; then
+            version_dir_A=$(basename "$sample_dir_A")
+            base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+            A="${base_dir_A}/${version_dir_A}"
+            path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
+            sample_dir="$data_dir/$G/$A"
+            basename_A=$version_dir_A
+        else
+            echo "Sample A directory not found. Exiting."
+            exit 1
+        fi
+    else
+        G=${G:-"G"}
+        validate_samples_and_stats "$H" "sample1"
+        basename_A=$(basename "$H")
+    fi
 
-if [ "$two_sample" == "TRUE" ] ; then
-   # Handle first sample (A or H)
-   if [ "$H" == "blank" ]; then
-       # Using sample A
-       sample_dir_A=$(get_sample_directory "$A")
-       if [ $? -eq 0 ]; then
-           version_dir_A=$(basename "$sample_dir_A")
-           base_dir_A=$(basename "$(dirname "$sample_dir_A")")
-           A="${base_dir_A}/${version_dir_A}"
-           path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
-           path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
-           hic_A_basename=$(basename "$path_hic_A")
-       else
-           echo "Sample A directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic1
-       path_hic_A=$H
-       hic_A_basename=$(basename "$H")
-       Rscript /tmp/calculate_stats.r "$path_hic_A" "sample_A" "$G" > /tmp/mergeStats_A.txt
-       path_mgs_A=/tmp/mergeStats_A.txt
-   fi
-
-   # Handle second sample (B or I)
-   if [ "$I" == "blank" ]; then
-       # Using sample B
-       sample_dir_B=$(get_sample_directory "$B")
-       if [ $? -eq 0 ]; then
-           version_dir_B=$(basename "$sample_dir_B")
-           base_dir_B=$(basename "$(dirname "$sample_dir_B")")
-           B="${base_dir_B}/${version_dir_B}"
-           path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
-           path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
-           hic_B_basename=$(basename "$path_hic_B")
-       else
-           echo "Sample B directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic2
-       path_hic_B=$I
-       hic_B_basename=$(basename "$I")
-       Rscript /tmp/calculate_stats.r "$path_hic_B" "sample_B" "$G" > /tmp/mergeStats_B.txt
-       path_mgs_B=/tmp/mergeStats_B.txt
-   fi
+    # Handle second sample (B or I)
+    if [ "$I" == "blank" ]; then
+        sample_dir_B=$(get_sample_directory "$B")
+        if [ $? -eq 0 ]; then
+            version_dir_B=$(basename "$sample_dir_B")
+            base_dir_B=$(basename "$(dirname "$sample_dir_B")")
+            B="${base_dir_B}/${version_dir_B}"
+            path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
+            path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
+            sample_dir_A="$data_dir/$G/$A"
+            sample_dir_B="$data_dir/$G/$B"
+            basename_B=$version_dir_B
+        else
+            echo "Sample B directory not found. Exiting."
+            exit 1
+        fi
+    else
+        validate_samples_and_stats "$I" "sample2"
+        basename_B=$(basename "$I")
+    fi
 fi
 
 #----------------------------------
@@ -347,10 +376,10 @@ if [[ -z $O ]]; then
     
     if [ "$two_sample" == "TRUE" ] ; then
         # For a two-sample test
-        O="${hic_A_basename}_v_${hic_B_basename}_APA_${random_num}"
+        O="${basename_A}_v_${basename_B}_APA_${random_num}"
     else
         # For a one-sample test
-        O="${hic_basename}_APA_${random_num}"
+        O="${basename}_APA_${random_num}"
     fi
     echo -e "\nNo output directory name provided. Generating output directory...\n"
 fi
@@ -423,10 +452,10 @@ if [ "$two_sample" == "FALSE" ] ; then
 
 #----------------------------------
 
-    pair1=$path_hic
+    pair1=$path_hic_A
     if [[ ! -f $pair1 ]]; then echo "cannot find $pair1"; exit 1; fi
   
-    stat1=$path_mgs
+    stat1=$path_mgs_A
     if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
 
@@ -453,7 +482,21 @@ if [ "$two_sample" == "FALSE" ] ; then
         exit 1
     fi
     
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted.txt" "${hic_basename}" "${c}" "${d}" "$out_dir/${hic_basename}_APA.pdf" ${win_size} "${r}" "${tmp_binified}" "${Q}" "$stat1" "${l}" "$num_loops" "$out_dir" "${e}"
+    Rscript $aqua_dir/plot_APA.r \
+      "$out_dir/APA_formatted.txt" \
+      "${basename}" \
+      "${c}" \
+      "${d}" \
+      "$out_dir/${basename}_APA.pdf" \
+      ${win_size} \
+      "${r}" \
+      "${tmp_binified}" \
+      "${Q}" \
+      "$stat1" \
+      "${l}" \
+      "$num_loops" \
+      "$out_dir" \
+      "${e}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
@@ -504,7 +547,7 @@ if [ "$two_sample" == "TRUE" ] ; then
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
     out_mat_A="$out_dir/$r/gw/APA.txt"
     if [ -f "$out_mat_A" ]; then
-        mv "$out_mat_A" "$out_dir/APA_raw_${hic_A_basename}.txt"
+        mv "$out_mat_A" "$out_dir/APA_raw_${basename_A}.txt"
     else
         echo -e "\nAPA failed for sample A (no output file produced). Please check input files and parameters.\n"
         exit 1
@@ -513,7 +556,7 @@ if [ "$two_sample" == "TRUE" ] ; then
     $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$tmp_binified" "$out_dir" &> /dev/null
     out_mat_B="$out_dir/$r/gw/APA.txt"
     if [ -f "$out_mat_B" ]; then
-        mv "$out_mat_B" "$out_dir/APA_raw_${hic_B_basename}.txt"
+        mv "$out_mat_B" "$out_dir/APA_raw_${basename_B}.txt"
     else
         echo -e "\nAPA failed for sample B (no output file produced). Please check input files and parameters\n"
         exit 1
@@ -522,13 +565,13 @@ if [ "$two_sample" == "TRUE" ] ; then
     #----------------------------------
 
 
-    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$hic_A_basename.txt > "$out_dir"/APA_formatted_$hic_A_basename.txt
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$basename_A.txt > "$out_dir"/APA_formatted_$basename_A.txt
 
-    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$hic_B_basename.txt > "$out_dir"/APA_formatted_$hic_B_basename.txt
+    awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$basename_B.txt > "$out_dir"/APA_formatted_$basename_B.txt
 
     # Sum values in each formatted matrix
-    matrix_sum_A=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${hic_A_basename}.txt")
-    matrix_sum_B=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${hic_B_basename}.txt")
+    matrix_sum_A=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${basename_A}.txt")
+    matrix_sum_B=$(awk '{ for(i=1;i<=NF;i++) sum+=$i } END { print sum }' "$out_dir/APA_formatted_${basename_B}.txt")
 
     # Check if both matrices are all zeros
     if [ "$matrix_sum_A" -eq 0 ] && [ "$matrix_sum_B" -eq 0 ]; then
@@ -536,14 +579,30 @@ if [ "$two_sample" == "TRUE" ] ; then
         exit 1
     fi
 
-    Rscript $aqua_dir/plot_APA.r "$out_dir/APA_formatted_$hic_A_basename.txt" "$out_dir/APA_formatted_$hic_B_basename.txt" "${hic_A_basename}" "${hic_B_basename}" "${c}" "${d}" $"$out_dir/${hic_A_basename}_v_${hic_B_basename}_APA.pdf" ${win_size} "${r}" "${tmp_binified}" "${Q}" "$stat1" "$stat2" "${l}" "$num_loops" "$out_dir" "${e}"
+    Rscript $aqua_dir/plot_APA.r \
+      "$out_dir/APA_formatted_$basename_A.txt" \
+      "$out_dir/APA_formatted_$basename_B.txt" \
+      "${basename_A}" "${basename_B}" \
+      "${c}" \
+      "${d}" \
+      $"$out_dir/${basename_A}_v_${basename_B}_APA.pdf" \
+      ${win_size} \
+      "${r}" \
+      "${tmp_binified}" \
+      "${Q}" \
+      "$stat1" \
+      "$stat2" \
+      "${l}" \
+      "$num_loops" \
+      "$out_dir" \
+      "${e}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
-    rm "$out_dir"/APA_raw_$hic_A_basename.txt
-    rm "$out_dir"/APA_raw_$hic_B_basename.txt
-    rm "$out_dir"/APA_formatted_$hic_A_basename.txt
-    rm "$out_dir"/APA_formatted_$hic_B_basename.txt
+    rm "$out_dir"/APA_raw_$basename_A.txt
+    rm "$out_dir"/APA_raw_$basename_B.txt
+    rm "$out_dir"/APA_formatted_$basename_A.txt
+    rm "$out_dir"/APA_formatted_$basename_B.txt
     rm "$tmp_binified"
     rm "$tmp_trimmed"
 
