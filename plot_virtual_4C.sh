@@ -33,7 +33,7 @@ function help {
     echo "    -V|--viewpoint          : The viewpoint to consider in chr:start format; -V chr1:40400000"
     echo "  [ -B|--sample2        ]   : For two sample analyses, name of the second sample"
     echo "  [    --sample1_dir    ]   : If not using the tinkerbox, specify the full path to the directory containing sample data"
-    echo "  [    --sample2_dir    ]   : For two sample analyses not on the tinkerbox, full path to the second sample directory"
+    echo "  [    --sample2_dir    ]   : If not using the tinkerbox, full path to the second sample directory"
     echo "  [ -Q|--norm           ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo "  [ -r|--resolution     ]   : Resolution of sample in basepairs. Default 5000"
     echo "  [ -O|--output_name    ]   : Optional name for the plot"
