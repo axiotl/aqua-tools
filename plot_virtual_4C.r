@@ -73,28 +73,28 @@ calculate_cap <- function(
       return(calculated_cap)
     }
   } else {
-      modified_mat <- zero_diag(denMat, 4)
-      non_zero_values <- modified_mat[modified_mat != 0]
-    }
-    
-    # Calculate skewness
-    skewness <- calculate_skewness(non_zero_values)
-    
-    # Define thresholds for skewness to apply scaling factors
-    skewness_threshold1 <- 1  # For moderate skewness
-    skewness_threshold2 <- 2  # For high skewness
-    
-    # Determine the scaling factor based on skewness
-    scaling_factor <- ifelse(abs(skewness) > skewness_threshold2, 3,
-                             ifelse(abs(skewness) > skewness_threshold1, 2, 1))
-    
-    # Calculate the nth percentile of the absolute values
-    high_percentile <- quantile(abs(non_zero_values), probs = 0.98, na.rm = TRUE)
-    
-    # Apply scaling factor to high percentile
-    cap_value <- high_percentile * scaling_factor
-    
-    return(abs(cap_value))
+    modified_mat <- zero_diag(denMat, 4)
+    non_zero_values <- modified_mat[modified_mat != 0]
+  }
+  
+  # Calculate skewness
+  skewness <- calculate_skewness(non_zero_values)
+  
+  # Define thresholds for skewness to apply scaling factors
+  skewness_threshold1 <- 1  # For moderate skewness
+  skewness_threshold2 <- 2  # For high skewness
+  
+  # Determine the scaling factor based on skewness
+  scaling_factor <- ifelse(abs(skewness) > skewness_threshold2, 3,
+                           ifelse(abs(skewness) > skewness_threshold1, 2, 1))
+  
+  # Calculate the nth percentile of the absolute values
+  high_percentile <- quantile(abs(non_zero_values), probs = 0.98, na.rm = TRUE)
+  
+  # Apply scaling factor to high percentile
+  cap_value <- high_percentile * scaling_factor
+  
+  return(abs(cap_value))
 }
 
 draw_scale <- function(
@@ -178,12 +178,12 @@ draw_title <- function(
 }
 
 
-draw_viewpoints <- function( A, C, left_side, viewpoint_start, height, analysis_type){
-
+draw_viewpoints <- function( A, C, left_side, viewpoint_start, analysis_type, height = "blank"){
+  
   viewpoint_bin     <- as.integer( floor( viewpoint_start / bin_size ) * bin_size )
   viewpoint_band    <- as.character(c( viewpoint_bin - width*bin_size , viewpoint_bin + width*bin_size ))
   viewpoint_label <- sprintf("%s:%d", viewpoint_chr, viewpoint_start)
-
+  
   if (!all(viewpoint_band %in% colnames(A))) {
     cat("\n Viewpoint probably too close to range border, try increasing range \n")
     q(status = 1, save = "no")
@@ -194,86 +194,84 @@ draw_viewpoints <- function( A, C, left_side, viewpoint_start, height, analysis_
   v4C_slice        <- as.data.frame(apply( v4C_slice, 1, mean )) ; colnames(v4C_slice) <- "contact_freq"
   v4C_slice$start  <- as.numeric(rownames(v4C_slice))
   
-  if(inherent){
-    v4C_slice_spline <- as.data.frame(cbind(v4C_slice$start, v4C_slice$contact_freq))
-  } else {
-    v4C_slice_spline <- as.data.frame( cbind(v4C_slice$start, smooth.spline(v4C_slice$start, v4C_slice$contact_freq)$y) )
-  }
+  v4C_slice_spline <- as.data.frame(cbind(v4C_slice$start, v4C_slice$contact_freq))
   
   y_pos <- -8
-
+  
+  # Define max vertical space for histogram
+  max_plot_height <- ifelse(analysis_type == "single_sample", 3, 4)
+  
+  # Get the appropriate max value for scaling
+  max_val <- max(abs(v4C_slice_spline$V2), na.rm = TRUE)
+  
+  # Determine height_scale, either user-supplied or calculated
+  if (height == "blank") {
+    height_raw <- max_plot_height / max_val
+    height_scale <- min(height_raw, 3)
+    cat(sprintf("  height: %.2f\n", height_scale))
+  } else {
+    height_scale <- as.numeric(height)
+    cat(sprintf("  height: %.2f\n", height_scale))
+  }
+  
   if( analysis_type == "single_sample" ){
-
     for ( i in 1:nrow(A) ){
       for (j in i:ncol(A)){
         color <- rownames(C[ order( abs( C[,"breaks"] - A[i,j] ), decreasing = FALSE ), ])[1]
-
+        
         rect(
           left_side + (j-1)*w, top-(i-1)*w,
           left_side +  j   *w, top- i   *w,
           col = color, border = NA
         )
-
+        
         if( i == viewpoint_bin_idx && j == viewpoint_bin_idx ){
-
           points( left_side + (j-0.8)*w, top- (i+1)*w, cex = 0.3, pch = 2, bg = "#aaaaaa", col = "#000000" )
-
           text( left_side-3 + (j-0.8)*w, top- (i+2.5)*w, labels = viewpoint_label, cex = 0.3, col = "gray" )
         }
-
+        
         if( i == viewpoint_bin_idx && j == ncol(A) ){
-
-          side                  <- left_side
-          profile_height_scale  <- height
-
+          side <- left_side
           for( k in 1:length(v4C_slice_spline$V2)){
-
-            x0 <- side + (k-1                    )*w
-            x1 <- side + (k                      )*w
-            y0 <- top  - y_pos
+            x0 <- side + (k-1)*w
+            x1 <- (side + k*w)-0.1
+            y0 <- top - y_pos
             
-            # Ensure non-negative bar heights
-            adjusted_value <- max(v4C_slice_spline$V2[k], 0.2)  # Minimum value of 0.2
-            y1 <- y0 + adjusted_value * profile_height_scale
-            
+            adjusted_value <- max(v4C_slice_spline$V2[k], 0.1)
+            y1 <- y0 + adjusted_value * height_scale
             
             if (inherent) {
-              # Match the value with the closest break in C to determine the color
               value <- v4C_slice_spline$V2[k]
               color <- rownames(C[order(abs(C[, "breaks"] - value), decreasing = FALSE), ])[1]
             } else {
-              # Default to red when inherent is FALSE
               color <- "red"
             }
             
             rect(x0, y0, x1, y1, border = NA, col = color)
             
             if( k == 1 ){
-
               segments(
                 x0-1,
-                ((top - y_pos + ( min(v4C_slice_spline$V2) )*profile_height_scale)) + 0.5,
+                ((top - y_pos + ( min(v4C_slice_spline$V2) )*height_scale)) + 0.5,
                 x0-1,
-                ((top - y_pos + ( max(v4C_slice_spline$V2) )*profile_height_scale)) - 0.5,
+                ((top - y_pos + ( max(v4C_slice_spline$V2) )*height_scale)) - 0.5,
                 col = "#aaaaaa",
                 lwd = 0.1
               )
-
               text(
                 x0-1,
-                (top - y_pos + ( min(v4C_slice_spline$V2) )*profile_height_scale),
+                (top - y_pos + ( min(v4C_slice_spline$V2) )*height_scale),
                 labels = round(abs(min(v4C_slice_spline$V2)),2),
                 col = "#aaaaaa", cex = 0.2
               )
-
               text(
                 x0-1,
-                (top - y_pos + ( max(v4C_slice_spline$V2) )*profile_height_scale),
+                (top - y_pos + ( max(v4C_slice_spline$V2) )*height_scale),
                 labels = round(max(v4C_slice_spline$V2),2),
                 col = "#aaaaaa", cex = 0.2
               )
             }
-
+            
             if( k == viewpoint_bin_idx){
               points( x0+(x1-x0)/2, y1+1, cex = 0.3, pch = 6, bg = "#aaaaaa", col = "#000000" )
               points( x0+(x1-x0)/2, y0-1, cex = 0.3, pch = 2, bg = "#aaaaaa", col = "#000000" )
@@ -283,84 +281,73 @@ draw_viewpoints <- function( A, C, left_side, viewpoint_start, height, analysis_
       }
     }
   }
-
+  
   if( analysis_type == "two_sample" ){
-
     for ( i in 1:nrow(A) ){
       for (j in i:ncol(A)){
         color <- rownames(C[ order( abs( C[,"breaks"] - A[i,j] ), decreasing = FALSE ), ])[1]
-
+        
         rect(
           left_side + (j-1)*w, top-(i-1)*w,
           left_side +  j   *w, top- i   *w,
           col = color, border = NA
         )
-
+        
         if( i == viewpoint_bin_idx && j == viewpoint_bin_idx ){
-
           points( left_side + (j-0.8)*w, top- (i+1)*w, cex = 0.3, pch = 2, bg = "#aaaaaa", col = "#000000" )
-
           text( left_side-3 + (j-0.8)*w, top- (i+2.5)*w, labels = viewpoint_label, cex = 0.3, col = "gray" )
         }
-
+        
         if( i == viewpoint_bin_idx && j == ncol(A) ){
-
-          side                  <- left_side
-          profile_height_scale  <- (height/4)
-
+          side <- left_side
           coordinates <- matrix(nrow=nrow(A), ncol=4) ; colnames(coordinates) <- c("x0","y0","x1","y1")
-
+          
           for (k in 1:length(v4C_slice_spline$V2)) {
-            
             x0 <- side + (k-1) * w
-            x1 <- side + k * w
-            
+            x1 <- (side + k * w)-0.1
             y <- top - y_pos
             
-            # Apply clamping for positive and negative values
-            if (v4C_slice_spline$V2[k] > 0) {
-              adjusted_value <- max(v4C_slice_spline$V2[k], 0.1)  # Clamp to at least 0.2
-              y0 <- y-0.1
-              y1 <- top - y_pos + adjusted_value * profile_height_scale
+            adjusted_value <- v4C_slice_spline$V2[k]
+            
+            if (adjusted_value > 0) {
+              y0 <- y
+              y1 <- y + adjusted_value * height_scale
               color <- "mediumvioletred"
             } else {
-              adjusted_value <- min(v4C_slice_spline$V2[k], -0.1)  # Clamp to at least -0.2
-              y0 <- top - y_pos + adjusted_value * profile_height_scale
-              y1 <- y+0.1
+              y0 <- y + adjusted_value * height_scale
+              y1 <- y
               color <- "dodgerblue"
             }
             
-            # Draw the rectangle
             rect(x0, y0, x1, y1, border = NA, col = color)
-
+            
             coordinates[k,"x0"] <- x0
             coordinates[k,"y0"] <- y0
             coordinates[k,"x1"] <- x1
             coordinates[k,"y1"] <- y1
-
+            
             if( k == viewpoint_bin_idx){
-
               points( x0+(x1-x0)/2, y1+1, cex = 0.3, pch = 6, bg = "#aaaaaa", col = "#000000" )
               points( x0+(x1-x0)/2, y0-1, cex = 0.3, pch = 2, bg = "#aaaaaa", col = "#000000" )
             }
           }
-          
+        
           segments(
             min(coordinates[,"x0"])-1,
             min(coordinates[,"y0"]) + 0.5,
             min(coordinates[,"x0"])-1,
-            max(coordinates[,"y1"])-0.5,
+            max(coordinates[,"y1"]) - 0.5,
             col = "#aaaaaa",
             lwd = 0.1
           )
-
+          
           text(
             min(coordinates[,"x0"])-1,
             min(coordinates[,"y0"]),
             labels = round(min(v4C_slice_spline$V2),2),
             col = "#aaaaaa", cex = 0.2
           )
-
+          
           text(
             min(coordinates[,"x0"])-1,
             max(coordinates[,"y1"]),
@@ -420,7 +407,7 @@ if( analysis_type == "single_sample" ){
   quant_cut       <- as.numeric(Args[13])
   max_cap         <- Args[14]
   width           <- as.numeric(Args[15])
-  height          <- as.numeric(Args[16])
+  height          <- Args[16]
   viewpoint_chr   <- Args[17]
   viewpoint_start <- as.numeric(Args[18])
   sample_dir      <- Args[19]
@@ -515,7 +502,7 @@ if( analysis_type == "single_sample" ){
   cat(sprintf("  norm_factor:  %f\n", norm_factor1 ))
   cat(sprintf("  aqua_factor:  %f\n", aqua_factor1 ))
   
-
+  
   sparMat1 <- straw( norm_method, 
                      path_hic,
                      paste( interval_chr, interval_start, interval_end, sep = ":"  ),
@@ -611,10 +598,6 @@ if( analysis_type == "single_sample" ){
     w  <- calculate_w(100, 100, c(interval_start, interval_end), 
                       bin_size)
     
-    if (w > 2 && bin_size >= 5000){cat(underplot_message)}
-    if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
-    if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
-    
     top   <- 134
     scale <- 1
     
@@ -626,7 +609,7 @@ if( analysis_type == "single_sample" ){
     
     top <- top - 20
     
-    draw_viewpoints( denMat1max , C , left_side = 0, viewpoint_start, height, analysis_type )
+    draw_viewpoints( denMat1max , C , left_side = 0, viewpoint_start, analysis_type, height)
     
     invisible(dev.off())
     
@@ -655,7 +638,7 @@ if( analysis_type == "single_sample" ){
         denMat1[x_index, y_index] <- sparMat1[i, "counts"]
       }
     }
-   
+    
     power_law_path <- list.files(
       sample_dir,
       pattern = paste0("inherentStats",".txt"),
@@ -734,7 +717,7 @@ if( analysis_type == "single_sample" ){
       cat("\n\nParameter --quant_cut is not applicable when inherent = TRUE.\nContinuing without --quant_cut...\n\n")
     }
     
-
+    
     colors_n       <- 10
     colors_0_1     <- colorRampPalette(c(inh_col_off , inh_col_on  ))( colors_n )
     colors_1_2     <- colorRampPalette(c(inh_col_on  , inh_col_ceil))( colors_n )
@@ -790,13 +773,16 @@ if( analysis_type == "single_sample" ){
     
     top <- top - 20
     
-    draw_viewpoints( A , C , left_side = 0, viewpoint_start, height, analysis_type)
+    draw_viewpoints( A , C , left_side = 0, viewpoint_start, analysis_type, height)
     
     invisible(dev.off())
     
   }
+  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
+  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
+  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
 }
-  
+
 
 
 
@@ -827,7 +813,7 @@ if( analysis_type == "two_sample" ){
   quant_cut         <- as.numeric(Args[15])
   max_cap           <- Args[16]
   width             <- as.numeric(Args[17])
-  height            <- as.numeric(Args[18])
+  height            <- Args[18]
   viewpoint_chr     <- Args[19]
   viewpoint_start   <- as.numeric(Args[20])
   sample_dirA       <- Args[21]
@@ -1039,10 +1025,6 @@ if( analysis_type == "two_sample" ){
   w  <- calculate_w(100, 100, c(interval_start, interval_end), 
                     bin_size)
   
-  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
-  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
-  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
-  
   top   <- 134
   scale <- 1
   
@@ -1053,8 +1035,12 @@ if( analysis_type == "two_sample" ){
   draw_scale( )
   
   top <- top - 20
+
+  draw_viewpoints( denDelta , C , left_side = 0, viewpoint_start, analysis_type, height)
   
-  draw_viewpoints( denDelta , C , left_side = 0, viewpoint_start, height, analysis_type )
+  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
+  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
+  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
   
   invisible(dev.off())
 }
