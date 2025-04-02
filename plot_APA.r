@@ -185,7 +185,7 @@ if( length(Args) == 14 ) {
 
   g <- arrangeGrob( p1[[4]], 
                     nrow = 1,
-                    top = paste( sample1, " (n.loop=", nrow(pairs), ")", sep = "" ) 
+                    top = paste( sample1, " (n.loop=", num_loops, ")", sep = "" )
                   )
 
     ggsave( file = out_file, 
@@ -446,7 +446,7 @@ if(length(Args) == 17) {
 
   g <- arrangeGrob( p1[[4]], p2[[4]], p3[[4]],
                     nrow = 1,
-                    top = paste(sampleA, ", ", sampleB, ", and delta", " (n.loop=", nrow(pairs), ")", sep = "" )
+                    top = paste(sampleA, ", ", sampleB, ", and delta", " (n.loop=",  num_loops, ")", sep = "" )
                   )
 
   ggsave( file = out_file, 
