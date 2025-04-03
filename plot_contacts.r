@@ -936,7 +936,7 @@ if(flag_inter == "FALSE"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
       } else if(flag_norm == "aqua"){
-        cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
+        cat("\n\n--norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
         flag_norm <- "cpm"
@@ -1655,7 +1655,7 @@ if(flag_inter == "FALSE"){
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
       } else if (flag_norm == "aqua"){
-        cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
+        cat("\n\n--norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
         flag_norm <- "cpm"
@@ -2137,7 +2137,7 @@ if(flag_inter == "TRUE"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
       } else if(flag_norm == "aqua"){
-        cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
+        cat("\n\n--norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
         flag_norm <- "cpm"
@@ -2598,7 +2598,7 @@ if(flag_inter == "TRUE"){
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
       } else if (flag_norm == "aqua"){
-        cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
+        cat("\n\n--norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
         flag_norm <- "cpm"
