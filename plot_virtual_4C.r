@@ -472,9 +472,10 @@ if( analysis_type == "single_sample" ){
       norm_factor1 <- norm_factor1
       aqua_factor1 <- 1
     } else if(flag_norm == "aqua"){
-      cat("\n\n--norm cannot be aqua for non-spike-in samples.\n# Please use cpm or none. Continuing with cpm...\n\n")
+      cat("\n\n--norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
       norm_factor1 <- norm_factor1
       aqua_factor1 <- 1
+      flag_norm <- "cpm"
     }
   }else if(spikeVar == 2){
     if(flag_norm == "blank"){
