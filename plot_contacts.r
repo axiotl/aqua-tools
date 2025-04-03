@@ -958,7 +958,10 @@ if(flag_inter == "FALSE"){
         aqua_factor1 <- aqua_factor1
       }
     }
-    
+
+    if(isTRUE(inherent)){
+        flag_norm <- "inherent"
+    }
     
     cat(      "\n  factors\n")
     cat(sprintf("  norm_factor: %f\n", norm_factor1 ))
