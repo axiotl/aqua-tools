@@ -39,9 +39,9 @@ function help {
     echo "    -P|--bedpe           : Full path to the bedpe file you want to annotate, without headers"
     echo "    -G|--genome          : The genome build the sample(s) has been processed using: hg19, hg38, or mm10"
     echo "    -A|--sample1         : Name of the sample as it appears on the Tinkerbox"
-    echo "  [    --hic1          ] : If not using the tinkerbox, directly specify the full path to the .hic"
     echo "  [ -B|--sample2       ] : For two sample delta contacts, name of the second sample"
-    echo "  [    --hic2          ] : If not using the tinkerbox, directly specify the full path to the second .hic"
+    echo "  [    --sample1_dir   ] : If not using the tinkerbox, specify the full path to the directory containing sample data"
+    echo "  [    --sample2_dir   ] : If not using the tinkerbox, full path to the second sample directory"
     echo "  [ -Q|--norm          ] : Which normalization to use: none, cpm, aqua, or abc in lower case"
     echo "  [ -R|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
     echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, or sum. Default center"
@@ -65,8 +65,8 @@ for arg in "$@"; do
   case "$arg" in
       "--bedpe")         set -- "$@" "-P" ;;
       "--sample1")       set -- "$@" "-A" ;;
-      "--hic1")          set -- "$@" "-H" ;;
-      "--hic2")          set -- "$@" "-I" ;;
+      "--sample1_dir")   set -- "$@" "-H" ;;
+      "--sample2_dir")   set -- "$@" "-I" ;;
       "--genome")        set -- "$@" "-G" ;;
       "--norm")          set -- "$@" "-Q" ;;
       "--sample2")       set -- "$@" "-B" ;;
@@ -129,41 +129,112 @@ done
 # Do all necessary parameter checks
 #----------------------------------
 
-# First validate sample1 inputs (A and H)
+if [[ -n "$A" && -z "$G" ]]; then
+  usage
+  exit 1
+fi
+
+#----------------------------------
+
+# Validate sample1 inputs
 if [[ -z "$A" && "$H" == "blank" ]]; then
-    echo "No sample1 or hic1 provided. Exiting."
+    echo "No sample provided. Exiting."
     usage
     exit 1
 fi
 
 if [[ ! -z "$A" && "$H" != "blank" ]]; then
-    echo "Need either sample1 name or hic1 path, not both. Exiting."
+    echo "Need either sample1 name or sample1 directory path, not both. Exiting."
     usage
     exit 1
+fi
+
+# Check if a path was given to A
+if [[ "$A" == *"/"* ]]; then
+  echo "The -A parameter expects a sample name, not a path. Did you mean to use --sample1_dir?"
+  exit 1
+fi
+
+# If A is provided, then G must be one of the allowed values: hg38, hg19, or mm10
+if [[ -n "$A" ]]; then
+  if [[ "$G" != "hg38" && "$G" != "hg19" && "$G" != "mm10" ]]; then
+    echo "-G must be one of: hg38, hg19, or mm10."
+    exit 1
+  fi
 fi
 
 # Initialize as single sample analysis
 two_sample=FALSE
 
-# Now check sample2 inputs (B and I)
+# Check sample2/hic2 inputs
 if [[ ! -z "$B" || "$I" != "blank" ]]; then
-    # At least one of B or I is provided - validate combination
     if [[ ! -z "$B" && "$I" != "blank" ]]; then
         echo "Need either sample2 name or hic2 path, not both. Exiting."
         usage
         exit 1
     fi
-    # Valid two sample case
     two_sample=TRUE
 fi
 
+#----------------------------------
+# Checks for $P
 
-
-if [[ -z $P || ! -f $P ]]; then
-    echo "\nInvalid file specified in '$P'\n"
+if [[ -z $P ]];
+then
     usage
+    exit
+fi
+
+if [[ ! -f "$P" ]]; then
+    echo "\n'$P' is not a valid file\n"
+    exit
+fi
+
+first_line=$(head -n 1 "$P")
+
+# Check for trailing whitespaces
+if [[ "$first_line" =~ [[:space:]]+$ ]]; then
+    echo "Trailing whitespace detected on the first line of the BEDPE file. Please remove and try again."
     exit 1
 fi
+
+# Check for a header by comparing the first three characters of the first and fourth columns
+col1=$(echo "$first_line" | cut -f1)
+col4=$(echo "$first_line" | cut -f4)
+if [[ "${col1:0:3}" != "${col4:0:3}" ]]; then
+    echo "Please provide a 6-col BEDPE file without headers."
+    exit 1
+fi
+
+awk_output=$(awk '
+        BEGIN {FS="\t"; errors=0; reversed=0}
+        NF < 6 {
+            print "BEDPE error: Line " NR " has fewer than 6 columns"
+            errors++
+        }
+        $3 < $2 || $6 < $5 {
+            print "BEDPE error: Reversed feet in line " NR
+            reversed++
+        }
+        END {
+            if (errors > 0) {
+                print "BEDPE error: file should contain at least 6 columns in all rows."
+                exit 1
+            }
+            if (reversed > 0) {
+                print "Please ensure that column 3 > column 2 and column 6 > column 5 for all entries."
+                exit 1
+            }
+            exit 0
+        }' "$P")
+
+
+if [[ $? -ne 0 ]]; then
+    echo "$awk_output"
+    exit 1
+fi
+
+#----------------------------------
 
 if [[ "$i" == "TRUE" && ( "$Q" != "blank" && "$Q" != "none" ) ]];
 then
@@ -171,45 +242,7 @@ then
     exit 1
 fi
 
-if [ -z "$G" ]; then
-    echo "\nNo genome build provided. Exiting.\n"
-    usage
-    exit 1
-fi
-
-
 #----------------------------------
-
-
-cat > /tmp/calculate_stats.r << 'EOF'
-suppressPackageStartupMessages(library(strawr))
-args <- commandArgs(trailingOnly = T)
-hic_file <- args[1] 
-sample   <- args[2]
-genome   <- args[3]
-chromosomes <- readHicChroms(hic_file)
-chromosomes <- chromosomes[chromosomes[,"length"] > 46000000,"name"]
-if("All" %in% chromosomes){
- chromosomes <- chromosomes[-(which(chromosomes == "All"))]}
-total_counts <- 0
-for(i in 1:length(chromosomes)){
- for(j in i:length(chromosomes)){
-   try({
-     mat <- straw("NONE", hic_file, chromosomes[i], chromosomes[j], "BP", 2500000)
-     count <- sum(mat[,"counts"])
-     total_counts <- total_counts + count
-   }, silent = TRUE)  
- }
-}
-interaction_types <- c("valid_interaction", "valid_interaction_rmdup", "trans_interaction", "cis_interaction", "cis_shortRange", "cis_longRange")
-values            <- c(total_counts, total_counts, "-", "-", "-", "-")
-mergeStats <- data.frame(interaction_type = interaction_types, values = as.character(values))
-header <- paste(sample, genome, sep = ".")
-cat("\t",header, "\n")
-for (row in 1:nrow(mergeStats)) {
- cat(paste(mergeStats[row, "interaction_type"], "\t", mergeStats[row, "values"]), "\n")
-}
-EOF
 
 
 get_sample_directory() {
@@ -236,92 +269,146 @@ else
 fi
 }
 
+validate_samples_and_stats() {
+  local sample_dir_input="$1"  # either -H or -I value
+  local sample_label="$2"      # sample1 or sample2 label
+  local hic_path mgs_path sample_name
+  
+  # Validate that the directory exists
+  if [[ ! -d "$sample_dir_input" ]]; then
+      echo "Directory '$sample_dir_input' does not exist. Exiting."
+      exit 1
+  fi
+
+  # Extract sample name from the directory name
+  sample_name=$(basename "$sample_dir_input")
+  
+  # Define expected file paths
+  hic_path="${sample_dir_input}/${sample_name}.hic"
+  mgs_path="${sample_dir_input}/${sample_name}.mergeStats.txt"
+  
+  # Check if the .hic file exists
+  if [[ ! -f "$hic_path" ]]; then
+      echo "Missing .hic file: $hic_path"
+      exit 1
+  fi
+  
+  # Check if the mergeStats.txt file exists
+  if [[ ! -f "$mgs_path" ]]; then
+      echo "Missing mergeStats.txt file: $mgs_path"
+      exit 1
+  fi
+
+  # Check for the required row and count data columns
+  local valid_row num_fields data_columns
+  valid_row=$(grep "^valid_interaction_rmdup" "$mgs_path")
+  if [ -z "$valid_row" ]; then
+      echo "The mergeStats file ($mgs_path) does not contain the required row 'valid_interaction_rmdup'. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+  num_fields=$(echo "$valid_row" | awk -F'\t' '{print NF}')
+  data_columns=$(( num_fields - 1 ))
+  
+  # Check for at least one data column (human reads)
+  if [[ "$data_columns" -lt 1 ]]; then
+      echo "$mgs_path is not properly formatted. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+      exit 1
+  fi
+
+  # If aqua normalization is requested, check for a second data column (mouse reads)
+  if [[ "$Q" == "aqua" ]]; then
+      if [[ "$data_columns" -lt 2 ]]; then
+          echo "Aqua normalization requested, but the mergeStats file ($mgs_path) does not contain a column for mouse reads. Please refer to the GitHub repository for formatting instructions: https://github.com/axiotl/aqua-tools"
+          exit 1
+      fi
+  fi
+
+  # Return the values as _A or _B
+  if [ "$sample_label" == "sample1" ]; then
+      path_hic_A="$hic_path"
+      path_mgs_A="$mgs_path"
+      sample_dir_A="$sample_dir_input"
+  elif [ "$sample_label" == "sample2" ]; then
+      path_hic_B="$hic_path"
+      path_mgs_B="$mgs_path"
+      sample_dir_B="$sample_dir_input"
+  fi
+}
 
 
-if [ "$two_sample" == "FALSE" ] ; then
-
+if [ "$two_sample" == "FALSE" ]; then
     if [ "$H" == "blank" ]; then
-
-        # Update sample A
+        # Using sample A via sample name
         sample_dir_A=$(get_sample_directory "$A")
         if [ $? -eq 0 ]; then
             version_dir_A=$(basename "$sample_dir_A")
             base_dir_A=$(basename "$(dirname "$sample_dir_A")")
             A="${base_dir_A}/${version_dir_A}"
+            sample_dir="$data_dir/$G/$A"
+            path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
+            #basename=$version_dir_A
         else
             echo "Sample directory not found. Exiting."
             exit 1
         fi
+    else
+        if [ "$i" == "TRUE" ]; then
+           echo -e "\nInherent normalization is not compatible with this sample."
+           exit 1
+        fi 
+        # Use G if provided or set to placeholder value
+        G=${G:-"G"}
+        A="blank"
+        # Process -H as sample1 directory
+        validate_samples_and_stats "$H" "sample1"
+    fi
+fi
 
-        path_hic="$data_dir"/"$G"/"$A"/"${version_dir_A}".allValidPairs.hic
-        path_mgs="$data_dir"/"$G"/"$A"/mergeStats.txt 
-
-    else 
-
-        path_hic=$H
-        Rscript /tmp/calculate_stats.r "$path_hic" "sample" "$G" > /tmp/mergeStats.txt
-        path_mgs=/tmp/mergeStats.txt
-
+if [ "$two_sample" == "TRUE" ]; then
+    # Handle first sample (A or H)
+    if [ "$H" == "blank" ]; then
+        sample_dir_A=$(get_sample_directory "$A")
+        if [ $? -eq 0 ]; then
+            version_dir_A=$(basename "$sample_dir_A")
+            base_dir_A=$(basename "$(dirname "$sample_dir_A")")
+            A="${base_dir_A}/${version_dir_A}"
+            path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
+            path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
+            sample_dir="$data_dir/$G/$A"
+        else
+            echo "Sample A directory not found. Exiting."
+            exit 1
+        fi
+    else
+        if [ "$i" == "TRUE" ]; then
+            echo -e "\nInherent normalization is not compatible with this sample."
+            exit 1
+        fi
+        G=${G:-"G"}
+        A="blank"
+        validate_samples_and_stats "$H" "sample1"
     fi
 
-fi
-
-
-if [ "$two_sample" == "TRUE" ] ; then
-   # Handle first sample (A or H)
-   if [ "$H" == "blank" ]; then
-       # Using sample A
-       sample_dir_A=$(get_sample_directory "$A")
-       if [ $? -eq 0 ]; then
-           version_dir_A=$(basename "$sample_dir_A")
-           base_dir_A=$(basename "$(dirname "$sample_dir_A")")
-           A="${base_dir_A}/${version_dir_A}"
-           path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
-           path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
-       else
-           echo "Sample A directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic1
-       path_hic_A=$H
-       Rscript /tmp/calculate_stats.r "$path_hic_A" "sample_A" "$G" > /tmp/mergeStats_A.txt
-       path_mgs_A=/tmp/mergeStats_A.txt
-   fi
-
-   # Handle second sample (B or I)
-   if [ "$I" == "blank" ]; then
-       # Using sample B
-       sample_dir_B=$(get_sample_directory "$B")
-       if [ $? -eq 0 ]; then
-           version_dir_B=$(basename "$sample_dir_B")
-           base_dir_B=$(basename "$(dirname "$sample_dir_B")")
-           B="${base_dir_B}/${version_dir_B}"
-           path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
-           path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
-       else
-           echo "Sample B directory not found. Exiting."
-           exit 1
-       fi
-   else
-       # Using hic2
-       path_hic_B=$I
-       Rscript /tmp/calculate_stats.r "$path_hic_B" "sample_B" "$G" > /tmp/mergeStats_B.txt
-       path_mgs_B=/tmp/mergeStats_B.txt
-   fi
-fi
-
-
-
-col1=$(head -n 1  $P | cut -f 1 )
-col1="${col1:0:3}"
-
-col4=$(head -n 1  $P | cut -f 4 )
-col4="${col4:0:3}"
-
-if [[ $col1 != $col4  ]]; then
-  echo "Please provide a 6-col bedpe file without headers"
-  exit
+    # Handle second sample (B or I)
+    if [ "$I" == "blank" ]; then
+        sample_dir_B=$(get_sample_directory "$B")
+        if [ $? -eq 0 ]; then
+            version_dir_B=$(basename "$sample_dir_B")
+            base_dir_B=$(basename "$(dirname "$sample_dir_B")")
+            B="${base_dir_B}/${version_dir_B}"
+            path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
+            path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
+            sample_dir_A="$data_dir/$G/$A"
+            sample_dir_B="$data_dir/$G/$B"
+        else
+            echo "Sample B directory not found. Exiting."
+            exit 1
+        fi
+    else
+        validate_samples_and_stats "$I" "sample2"
+        B="blank"
+    fi
 fi
 
 #----------------------------------
@@ -343,8 +430,8 @@ then
     $aqua_dir/query_bedpe.r \
       $P \
       $R \
-      $path_hic \
-      $path_mgs \
+      $path_hic_A \
+      $path_mgs_A \
       $Q \
       $G \
       $num_loops \
@@ -374,18 +461,4 @@ then
       $G \
       $num_loops \
       $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $i
-fi
-
-
-if [ -f "/tmp/calculate_stats.r" ]; then
-    rm /tmp/calculate_stats.r
-fi
-if [ -f "/tmp/mergeStats.txt" ]; then
-    rm /tmp/mergeStats.txt
-fi
-if [ -f "/tmp/mergeStats_A.txt" ]; then
-    rm /tmp/mergeStats_A.txt
-fi
-if [ -f "/tmp/mergeStats_B.txt" ]; then
-    rm /tmp/mergeStats_B.txt
 fi
