@@ -310,6 +310,14 @@ case "$r" in
 esac
 
 #----------------------------------
+# check for multiple normalization methods 
+if [[ "$Q" != "blank" && "$i" != "FALSE" ]]; then
+  echo -e "\nInherent normalization is not compatible with other --norm methods. Continuing with --inherent TRUE ..."
+  Q="blank"
+  i="TRUE"
+fi
+
+#----------------------------------
 
 # Check if both -R and -g are provided
 if [[ -n $R && -n $g ]]; then
