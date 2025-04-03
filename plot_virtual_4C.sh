@@ -440,8 +440,8 @@ if [ "$two_sample" == "FALSE" ]; then
   hg_total1=`head -3 $stat1 | tail -1 | cut -f2 | perl -nle 's/\r//g; print;'`
   mm_total1=`head -3 $stat1 | tail -1 | cut -f3 | perl -nle 's/\r//g; print;'`
 
-  echo -e "\ntotal sample reads for $(basename "$path_hic"): $hg_total1"
-  echo -e "total spike-in reads for $(basename "$path_hic"): $mm_total1\n"
+  echo -e "\ntotal sample reads for $(basename "$path_hic_A"): $hg_total1"
+  echo -e "total spike-in reads for $(basename "$path_hic_A"): $mm_total1\n"
 
   has_aqua=true
   total1=$hg_total1
