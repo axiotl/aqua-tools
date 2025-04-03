@@ -197,11 +197,10 @@ if [[ -n "$A" ]]; then
 fi
 
 # Check for inherent normalization attempt with local samples
-if [[ -n "$H" && "$i" == "TRUE" ]]; then
+if [[ "$H" != "blank" && "$i" == "TRUE" ]]; then
   echo -e "\n--inherent normalization is not compatible with local installation. Try tinker-public/Docker for access to inherent normalized public samples, or sign up for tinker-private to use inherent normalization with any sample. Continuing without --inherent TRUE..."
   i="FALSE"
 fi
-
 
 # Initialize as single sample analysis
 two_sample=FALSE
