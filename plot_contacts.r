@@ -939,6 +939,7 @@ if(flag_inter == "FALSE"){
         cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
+        flag_norm <- "cpm"
       }
     }else if(spikeVar == 2){
       if(flag_norm == "blank"){
@@ -964,7 +965,7 @@ if(flag_inter == "FALSE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", norm     ))
+    cat(sprintf("       norm: %s\n", flag_norm  ))
     cat(sprintf("        hic: %s\n", path_hic ))
     cat(sprintf("   interval: %s\n", paste( new_interval_chr, interval_start, interval_end, sep = ":"  ) ))
     cat(sprintf("       unit: %s\n", unit     ))
@@ -1657,6 +1658,7 @@ if(flag_inter == "FALSE"){
         cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
+        flag_norm <- "cpm"
       }
     } else if (spikeVar_A == 2 || spikeVar_B == 2){
       if (flag_norm == "blank"){
@@ -1687,7 +1689,7 @@ if(flag_inter == "FALSE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", norm       ))
+    cat(sprintf("       norm: %s\n", flag_norm  ))
     cat(sprintf("      hic_A: %s\n", path_hic_A ))
     cat(sprintf("      hic_B: %s\n", path_hic_B ))
     cat(sprintf("   interval: %s\n", paste( interval_chr, interval_start, interval_end, sep = ":"  ) ))
@@ -2138,6 +2140,7 @@ if(flag_inter == "TRUE"){
         cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
+        flag_norm <- "cpm"
       }
     }else if(spikeVar == 2){
       if(flag_norm == "blank"){
@@ -2162,7 +2165,7 @@ if(flag_inter == "TRUE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", norm     ))
+    cat(sprintf("       norm: %s\n", flag_norm ))
     cat(sprintf("        hic: %s\n", path_hic ))
     cat(sprintf("   interval: %s\n", paste( new_interval_chr1, interval_start1, interval_end1, sep = ":"  ) ))
     cat(sprintf("   interval: %s\n", paste( new_interval_chr2, interval_start2, interval_end2, sep = ":"  ) ))
@@ -2598,6 +2601,7 @@ if(flag_inter == "TRUE"){
         cat("\n\nError: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
+        flag_norm <- "cpm"
       }
     } else if (spikeVar_A == 2 || spikeVar_B == 2){
       if (flag_norm == "blank"){
@@ -2628,7 +2632,7 @@ if(flag_inter == "TRUE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", norm       ))
+    cat(sprintf("       norm: %s\n", flag_norm  ))
     cat(sprintf("      hic_A: %s\n", path_hic_A ))
     cat(sprintf("      hic_B: %s\n", path_hic_B ))
     cat(sprintf("   interval: %s\n", paste( interval_chr1, interval_start1, interval_end1, sep = ":"  ) ))
