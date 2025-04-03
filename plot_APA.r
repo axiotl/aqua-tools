@@ -99,7 +99,7 @@ if( length(Args) == 14 ) {
       norm_factor1 <- norm_factor1
       aqua_factor1 <- 1
     } else if(flag_norm == "aqua"){
-      cat("\n\n# Error: --norm cannot be aqua for non-spike-in samples.\n# Please use cpm or none. Continuing with cpm...\n\n")
+      cat("\n\n# Error: --norm cannot be aqua for non-spike-in samples.\nPlease use cpm or none. Continuing with cpm...\n\n")
       norm_factor1 <- norm_factor1
       aqua_factor1 <- 1
       flag_norm <- "cpm"
