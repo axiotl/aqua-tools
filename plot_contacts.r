@@ -929,6 +929,7 @@ if(flag_inter == "FALSE"){
       if(flag_norm == "blank"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
+        flag_norm <- "cpm"
       } else if(flag_norm == "none"){
         norm_factor1 <- 1
         aqua_factor1 <- 1
@@ -945,6 +946,7 @@ if(flag_inter == "FALSE"){
       if(flag_norm == "blank"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- aqua_factor1
+        flag_norm <- "aqua"
       } else if(flag_norm == "none"){
         norm_factor1 <- 1
         aqua_factor1 <- 1
@@ -1648,6 +1650,7 @@ if(flag_inter == "FALSE"){
       if (flag_norm == "blank"){
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
+        flag_norm <- "cpm"
       } else if (flag_norm == "none"){
         norm_factor1 <- 1 ; aqua_factor1 <- 1
         norm_factor2 <- 1 ; aqua_factor2 <- 1
@@ -1666,6 +1669,7 @@ if(flag_inter == "FALSE"){
         aqua_factor1 <- aqua_factor1
         norm_factor2 <- norm_factor2
         aqua_factor2 <- aqua_factor2
+        flag_norm <- "aqua"
       } else if (flag_norm == "none"){
         norm_factor1 <- 1 ; aqua_factor1 <- 1
         norm_factor2 <- 1 ; aqua_factor2 <- 1
@@ -2130,6 +2134,7 @@ if(flag_inter == "TRUE"){
       if(flag_norm == "blank"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
+        flag_nor <- "cpm"
       } else if(flag_norm == "none"){
         norm_factor1 <- 1
         aqua_factor1 <- 1
@@ -2146,6 +2151,7 @@ if(flag_inter == "TRUE"){
       if(flag_norm == "blank"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- aqua_factor1
+        flag_norm <- "aqua"
       } else if(flag_norm == "none"){
         norm_factor1 <- 1
         aqua_factor1 <- 1
@@ -2591,6 +2597,7 @@ if(flag_inter == "TRUE"){
       if (flag_norm == "blank"){
         norm_factor1 <- norm_factor1 ; aqua_factor1 <- 1
         norm_factor2 <- norm_factor2 ; aqua_factor2 <- 1
+        flag_norm <- "cpm"
       } else if (flag_norm == "none"){
         norm_factor1 <- 1 ; aqua_factor1 <- 1
         norm_factor2 <- 1 ; aqua_factor2 <- 1
@@ -2609,6 +2616,7 @@ if(flag_inter == "TRUE"){
         aqua_factor1 <- aqua_factor1
         norm_factor2 <- norm_factor2
         aqua_factor2 <- aqua_factor2
+        flag_norm <- "aqua"
       } else if (flag_norm == "none"){
         norm_factor1 <- 1 ; aqua_factor1 <- 1
         norm_factor2 <- 1 ; aqua_factor2 <- 1
