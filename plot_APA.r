@@ -102,6 +102,7 @@ if( length(Args) == 14 ) {
       cat("\n\n# Error: --norm cannot be aqua for non-spike-in samples.\n# Please use cpm or none. Continuing with cpm...\n\n")
       norm_factor1 <- norm_factor1
       aqua_factor1 <- 1
+      flag_norm <- "cpm"
     }
   }else if(spikeVar == 2){
     if(flag_norm == "blank"){
