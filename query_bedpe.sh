@@ -344,10 +344,9 @@ if [ "$two_sample" == "FALSE" ]; then
             version_dir_A=$(basename "$sample_dir_A")
             base_dir_A=$(basename "$(dirname "$sample_dir_A")")
             A="${base_dir_A}/${version_dir_A}"
-            sample_dir="$data_dir/$G/$A"
+            sample_dir_A="$data_dir/$G/$A"
             path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
             path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
-            #basename=$version_dir_A
         else
             echo "Sample directory not found. Exiting."
             exit 1
@@ -375,7 +374,7 @@ if [ "$two_sample" == "TRUE" ]; then
             A="${base_dir_A}/${version_dir_A}"
             path_hic_A="$data_dir/$G/$A/${version_dir_A}.allValidPairs.hic"
             path_mgs_A="$data_dir/$G/$A/mergeStats.txt"
-            sample_dir="$data_dir/$G/$A"
+            sample_dir_A="$data_dir/$G/$A"
         else
             echo "Sample A directory not found. Exiting."
             exit 1
@@ -399,7 +398,6 @@ if [ "$two_sample" == "TRUE" ]; then
             B="${base_dir_B}/${version_dir_B}"
             path_hic_B="$data_dir/$G/$B/${version_dir_B}.allValidPairs.hic"
             path_mgs_B="$data_dir/$G/$B/mergeStats.txt"
-            sample_dir_A="$data_dir/$G/$A"
             sample_dir_B="$data_dir/$G/$B"
         else
             echo "Sample B directory not found. Exiting."
