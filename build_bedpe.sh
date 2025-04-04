@@ -124,12 +124,18 @@ done
 # -----------------------------------------
 # Parameter checks
 
-if [ ! -f "$A" ]; then
+if [ -z "$A" ]; then
+  echo -e "\nMissing required argument -A (path to first BED file)." >&2
+  exit 1
+elif [ ! -f "$A" ]; then
   echo -e "\nFile '$A' does not exist." >&2
   exit 1
 fi
 
-if [ ! -f "$B" ]; then
+if [ -z "$B" ]; then
+  echo -e "\nMissing required argument -B (path to second BED file)." >&2
+  exit 1
+elif [ ! -f "$B" ]; then
   echo -e "\nFile '$B' does not exist." >&2
   exit 1
 fi
@@ -139,7 +145,6 @@ if [[ "$T" != "NULL" ]] && [ ! -f "$T" ]; then
   exit 1
 fi
 
-# Check that d and D are numeric
 if ! [[ "$d" =~ ^[0-9]+$ ]]; then
   echo -e "\nMinimum distance (-d) must be numeric only (e.g., 0, 100, 100000)" >&2
   exit 1
@@ -150,7 +155,6 @@ if ! [[ "$D" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Helpful message in edge cases
 if [[ "$d" -ge "$D" ]]; then
   echo -e "\nMinimum distance (d=$d) must be less than maximum distance (D=$D)" >&2
   exit 1
@@ -206,29 +210,36 @@ if [[ $t == "FALSE" ]]; then
         cat "$temp_dir/intersect_left.bedpe" "$temp_dir/intersect_right.bedpe" > "$temp_dir/intersected_file.bedpe"
 
         cat "$temp_dir/intersected_file.bedpe" | 
+        
         awk -v ml="$ml" -v mr="$mr" 'BEGIN {OFS="\t"} {
-            # Print A columns
-            for (i=1; i<=3; i++) {
-                printf $i OFS
+            # Print A columns (1–3) without tab before 1st value, rest with leading tab
+            printf $1
+            for (i = 2; i <= 3; i++) {
+                printf OFS $i
             }
-            # Print C columns
-            for (i=7+ml+mr; i<=9+ml+mr; i++) {
-                printf $i OFS
+
+            # Print B columns (7+ml+mr – 9+ml+mr)
+            for (i = 7+ml+mr; i <= 9+ml+mr; i++) {
+                printf OFS $i
             }
-            # Print A-meta columns
+
+            # A metadata (4–3+ml)
             if (ml > 0) {
-                for (i=4; i<=3+ml; i++) {
-                    printf $i OFS
+                for (i = 4; i <= 3+ml; i++) {
+                    printf OFS $i
                 }
             }
-            # Print B-meta columns
+
+            # B metadata (7+ml – 6+ml+mr)
             if (mr > 0) {
-                for (i=7+ml; i<=6+ml+mr; i++) {
-                    printf $i OFS
+                for (i = 7+ml; i <= 6+ml+mr; i++) {
+                    printf OFS $i
                 }
             }
+
             printf "\n"
         }' "$temp_dir/intersected_file.bedpe" > "$temp_dir/desired_file.bedpe"
+
 
         # Process the desired_file.bedpe to enforce the distance constraints
         awk -v d="$d" -v D="$D" 'BEGIN { OFS="\t" } {
@@ -259,28 +270,34 @@ if [[ $t == "FALSE" ]]; then
         awk 'BEGIN {OFS="\t"} {$1=$1; print}' | \
         cut -f 2- | \
         awk -v ml="$ma" -v mr="$mb" 'BEGIN {OFS="\t"} {
-            # Print A columns (chrom, start, end)
-            for (i=1; i<=3; i++) {
-                printf $i OFS
+            # Print A columns (1–3)
+            printf $1
+            for (i=2; i<=3; i++) {
+                printf OFS $i
             }
-            # Print B columns (positions 4+ml to 6+ml)
+
+            # Print B columns (4+ml to 6+ml)
             for (i=4+ml; i<=6+ml; i++) {
-                printf $i OFS
+                printf OFS $i
             }
-            # Print A-meta columns
+
+            # Print A-meta columns (4 to 3+ml)
             if (ml > 0) {
                 for (i=4; i<=3+ml; i++) {
-                    printf $i OFS
+                    printf OFS $i
                 }
             }
-            # Print B-meta columns
+
+            # Print B-meta columns (7+ml to 6+ml+mr)
             if (mr > 0) {
                 for (i=7+ml; i<=6+ml+mr; i++) {
-                    printf $i OFS
+                    printf OFS $i
                 }
             }
+
             printf "\n"
         }' | uniq | filter_duplicate_feet > "$temp_dir/tad_output.bedpe"
+
 
         # If non-default distance constraints are specified, apply additional filtering
         if [ "$d" -ne 0 ] || [ "$D" -ne 5000000 ]; then
@@ -312,21 +329,34 @@ elif [[ $t == "TRUE" ]]; then
                 while read -r lineB; do
                     awk -v lineB="$lineB" -v chr="$chr1" -v ma="$ma" -v mb="$mb" 'BEGIN {OFS="\t"} $1 == chr {
                         split(lineB, arrB, OFS);
-                        printf $1 OFS $2 OFS $3 OFS;
-                        printf arrB[1] OFS arrB[2] OFS arrB[3] OFS;
-                        for (i=4; i<4+ma; i++) {
-                            printf $i OFS;
+
+                        # Print As 3 columns
+                        printf $1
+                        printf OFS $2
+                        printf OFS $3
+
+                        # Print Bs 3 columns
+                        printf OFS arrB[1]
+                        printf OFS arrB[2]
+                        printf OFS arrB[3]
+
+                        # Print A meta
+                        for (i=4; i<=3+ma; i++) {
+                            printf OFS $i
                         }
-                        for (i=4; i<4+mb; i++) {
-                            printf arrB[i] OFS;
+
+                        # Print B meta
+                        for (i=4; i<=3+mb; i++) {
+                            printf OFS arrB[i]
                         }
-                        printf "\n";
+
+                        printf "\n"
                     }' "$A"
                 done
             fi
         done
     done
-
 fi
+
 
 trap "rm -rf $temp_dir" EXIT
