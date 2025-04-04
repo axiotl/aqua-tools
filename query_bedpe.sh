@@ -192,13 +192,6 @@ fi
 
 first_line=$(head -n 1 "$P")
 
-# Check for trailing whitespaces
-if [[ "$first_line" =~ [[:space:]]+$ ]]; then
-    echo "Trailing whitespace detected on the first line of the BEDPE file. Please remove and try again."
-    exit 1
-fi
-
-# Check for a header by comparing the first three characters of the first and fourth columns
 col1=$(echo "$first_line" | cut -f1)
 col4=$(echo "$first_line" | cut -f4)
 if [[ "${col1:0:3}" != "${col4:0:3}" ]]; then
