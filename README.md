@@ -44,7 +44,7 @@ The free tier of Tinker is capped at 40 total hours of machine use time, followi
 - **Unlimited access**: No time cap for Tinker use time
 - **Pre-built notebooks**: Ready to use notebooks shoehorned to 3D genomic research questions
 
-To get started with Tinker, visit [tinker](https://tinker.axiotl.com/public)
+To get started with Tinker, visit [tinker](https://tinker.axiotl.com)
 
 
 ### Docker
@@ -54,7 +54,7 @@ To use AQuA tools locally, we highly recommend using Docker for an easy and cohe
 - Isolated environment with all dependencies
 - Regular updates with addition of publically available HiChIPs
 
-Similar to [Tinker](https://tinker.axiotl.com/public), the container built using the image will come with:
+Similar to [Tinker](https://tinker.axiotl.com), the container built using the image will come with:
 - Access to a collection of reference datasets and invariant genome annotations
 - Access to all tools, including `annotate_clusters`, `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 
