@@ -31,7 +31,7 @@ AQuA tools `annotate_clusters`, `plot_contacts` and `extract_bedpe` will be inco
 <img src="https://github.com/user-attachments/assets/ba022609-b24b-4f9a-a121-3f99eef21bb3" width="750" height="550">
 
 ### Tinker
-[Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
+[Tinker](https://tinker.axiotl.com) is our cloud platform specifically designed for 3D genomics analyses. It offers:
 
 - No needed installation  and immeditely accessible via browser
 - Access to a collection of reference datasets and invariant genome annotations
