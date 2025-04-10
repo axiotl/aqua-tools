@@ -46,7 +46,7 @@ function help {
     echo "  [ -R|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
     echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, or sum. Default center"
     echo "  [ -F|--fix           ] : If FALSE, reports new coordinates using center or max arithmetic. Default TRUE"
-    echo "  [    --expand        ] : Expands 1D bedpe feet in both directions by given bin value. Default 0"
+    echo "  [    --expand        ] : Expands bedpe feet in both directions by supplied value in base pairs. Default 0"
     echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default FALSE"
     echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default TRUE"
     echo "  [ -h|--help          ] : Help message"
