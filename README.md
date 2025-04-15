@@ -6,7 +6,7 @@
 - [About](#about)
 - [Use](#Use)
 - [Installation](#installation)
-- [Usage Recipes](#recipes)
+- [Recipes](#recipes)
   - [Getting Started](#getting-started)
   - [Loop Calling](#i-loop-calling)
   - [Visualization](#ii-visualization)
@@ -20,7 +20,7 @@
 >Gryder, B.E., Khan, J. & Stanton, B.Z. Measurement of differential chromatin interactions with absolute quantification of architecture (AQuA-HiChIP). Nat Protoc 15, 1209–1236 (2020). https://doi.org/10.1038/s41596-019-0285-9
 
 
-## Use and Availability
+## Installation
 AQuA-Tools can be used through any of the following entrypoints:
 - [Tinker Cloud Platform](#tinker)
 - [Docker Container](#docker)
