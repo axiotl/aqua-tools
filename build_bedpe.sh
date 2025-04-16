@@ -34,7 +34,22 @@ filter_duplicate_feet() {
     '
 }
 
-
+order_feet() {
+    awk '
+    BEGIN { OFS = "\t" }
+    {
+        if ($1 == $4 && $2 <= $5) {
+            print
+        } else {
+            n = NF
+            meta = ""
+            if (n > 6) {
+                for (i = 7; i <= n; i++) meta = meta OFS $i
+            }
+            print $4, $5, $6, $1, $2, $3 meta
+        }
+    }'
+}
 
 function usage {
     echo "usage : build_bedpe.sh \\"
@@ -246,7 +261,7 @@ if [[ $t == "FALSE" ]]; then
             diff = ($5 > $2 ? $5 - $2 : $2 - $5);
             if (diff >= d && diff <= D)
                 print $0;
-        }' "$temp_dir/desired_file.bedpe" | uniq | filter_duplicate_feet
+        }' "$temp_dir/desired_file.bedpe" | uniq | filter_duplicate_feet | order_feet
 
     elif [[ $T != "NULL" ]]; then
 
@@ -296,7 +311,7 @@ if [[ $t == "FALSE" ]]; then
             }
 
             printf "\n"
-        }' | uniq | filter_duplicate_feet > "$temp_dir/tad_output.bedpe"
+        }' | uniq | filter_duplicate_feet | order_feet > "$temp_dir/tad_output.bedpe"
 
 
         # If non-default distance constraints are specified, apply additional filtering
@@ -305,7 +320,7 @@ if [[ $t == "FALSE" ]]; then
                 diff = ($5 > $2 ? $5 - $2 : $2 - $5);
                 if (diff >= d && diff <= D)
                     print $0;
-            }' "$temp_dir/tad_output.bedpe" | uniq | filter_duplicate_feet
+            }' "$temp_dir/tad_output.bedpe"
         else
             cat "$temp_dir/tad_output.bedpe"
         fi
