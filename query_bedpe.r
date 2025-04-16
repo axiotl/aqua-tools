@@ -249,18 +249,18 @@ calculate_new_feet <- function(sparse_mat, formula, midpoint_1, midpoint_2, bin_
   switch(
     formula,
     "center" = {
-      new_start1 <- as.numeric(midpoint_2)
+      new_start1 <- as.numeric(midpoint_1)
       new_end1   <- new_start1 + bin_size
       
-      new_start2 <- as.numeric(midpoint_1)
+      new_start2 <- as.numeric(midpoint_2)
       new_end2   <- new_start2 + bin_size
     },
     "max" = {
       coords <- which(max(sparse_mat) == sparse_mat, arr.ind = TRUE)
-      new_start1 <- as.numeric(rownames(sparse_mat)[coords[1, 1]])
+      new_start1 <- as.numeric(colnames(sparse_mat)[coords[1, 2]])  # foot1
       new_end1   <- new_start1 + bin_size
       
-      new_start2 <- as.numeric(colnames(sparse_mat)[coords[1, 2]])
+      new_start2 <- as.numeric(rownames(sparse_mat)[coords[1, 1]])  # foot2
       new_end2   <- new_start2 + bin_size
     },
     "sum" = {
