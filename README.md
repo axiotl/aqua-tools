@@ -4,9 +4,8 @@
 
 ## Table of Contents
 - [About](#about)
-- [Use](#Use)
 - [Installation](#installation)
-- [Recipes](#recipes)
+- [Docker Recipe](#docker-recipe)
   - [Getting Started](#getting-started)
   - [Loop Calling](#i-loop-calling)
   - [Visualization](#ii-visualization)
@@ -31,9 +30,9 @@ AQuA tools `annotate_clusters`, `plot_contacts` and `extract_bedpe` will be inco
 <img src="https://github.com/user-attachments/assets/ba022609-b24b-4f9a-a121-3f99eef21bb3" width="750" height="550">
 
 ### Tinker
-[Tinker](https://tinker.axiotl.com) is our cloud platform specifically designed for 3D genomics analyses. It offers:
+[Tinker](https://tinker.axiotl.com/public) is our cloud platform specifically designed for 3D genomics analyses. It offers:
 
-- No needed installation  and immeditely accessible via browser
+- No installation needed and immeditely accessible via browser
 - Access to a collection of reference datasets and invariant genome annotations
 - Access to all tools
 - Faster outputs for large `query_bedpe` calls
@@ -44,7 +43,7 @@ The free tier of Tinker is capped at 40 total hours of machine use time, followi
 - **Unlimited access**: No time cap for Tinker use time
 - **Pre-built notebooks**: Ready to use notebooks shoehorned to 3D genomic research questions
 
-To get started with Tinker, visit [tinker](https://tinker.axiotl.com)
+To get started with Tinker, visit [tinker](https://tinker.axiotl.com/public)
 
 
 ### Docker
@@ -54,7 +53,7 @@ To use AQuA tools locally, we highly recommend using Docker for an easy and cohe
 - Isolated environment with all dependencies
 - Regular updates with addition of publically available HiChIPs
 
-Similar to [Tinker](https://tinker.axiotl.com), the container built using the image will come with:
+Similar to [Tinker](https://tinker.axiotl.com/public), the container built using the image will come with:
 - Access to a collection of reference datasets and invariant genome annotations
 - Access to all tools, including `annotate_clusters`, `extract_bedpe`, `plot_contacts` and parameter `--inherent` for `query_bedpe` and `plot_virtual_4C`
 
@@ -165,8 +164,36 @@ echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
     echo "export juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar" >> $HOME/.bashrc
 
 ```
+#### Sample Data Formatting Requirements
 
-## Recipes
+We use `.hic` files as the only format of data source. In addition, we need a `.mergeStats.txt` file containing valid interaction read counts for human and mouse genome alignments. This is a modified version of a typical `.mergestat` file (an output of the [HiC-Pro](https://github.com/nservant/HiC-Pro) pipeline) that contains QC information for human and mouse PETs in one file. A `.mergeStats.txt` file should look like the following:
+
+|  | GM12878.hg38 | GM12878.mm10 |
+| ---------- | -------- | ------ |
+| valid_interaction_rmdup       |  274352694   | 5205894 |
+| trans_interaction       |  80252048   |  708100   |
+| cis_interaction       |   194100646   |  4497794  |
+| cis-shortRange       |  170608942   |  3506516  |
+| cis_longRange       |  23491704   |  991278  |
+
+
+**Note:** At minimum, include the valid_interaction_rmdup row with the human read count. Other rows (trans_interaction, cis_interaction) and the .mm10 (mouse reads) column are optional. AQuA tools that use normalization will detect the presence or absence of the .mm10 column in your .mergeStats.txt file to select the default normalization method. AQuA tools will default to CPM normalization if the .mm10 column is missing, or use AQuA normalization when it’s present.
+
+The .hic and .mergeStats.txt files must be housed in a folder named after the sample and named strictly as follows:
+
+```
+   + ~/SAMPLE
+       ++ SAMPLE.hic
+       ++ SAMPLE.mergeStats.txt
+```
+If sample name is `GM12878`, the data structure should look like:
+```
+   + ~/GM12878
+       ++ GM12878.hic
+       ++ GM12878.mergeStats.txt
+```
+
+## Docker Recipe
 All AQuA tools are executable from anywhere inside the Docker container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
 Detailed material on how to use the tools can be found at our [Docs](https://docs.axiotl.com/).
 
