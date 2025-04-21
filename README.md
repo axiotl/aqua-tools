@@ -174,7 +174,7 @@ cd $HOME
 wget -O latest_aqua_tools.tar.gz "https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication.tar.gz?cache-bust=$(date +%s)" && \
     tar -xzvf latest_aqua_tools.tar.gz && \
     mv aqua_tools_publication/* . && \
-    rm -r aqua_tools_publication latest_aqua_tools.tar.gz
+    rm -r aqua_tools_publication setup latest_aqua_tools.tar.gz
 ```
     
 #### Sample Data Formatting Requirements
