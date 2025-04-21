@@ -153,6 +153,8 @@ wget -O latest_aqua_tools.zip "https://github.com/axiotl/aqua-tools/archive/refs
     mv aqua-tools-main aqua_tools && \
     rm latest_aqua_tools.zip
 
+chmod +x $HOME/aqua_tools/*.sh
+
 echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
     echo "alias build_bedpe='$HOME/aqua_tools/build_bedpe.sh'" >> $HOME/.bashrc && \
     echo "alias cluster_bedpe='$HOME/aqua_tools/cluster_bedpe.sh'" >> $HOME/.bashrc && \
@@ -163,7 +165,16 @@ echo "alias query_bedpe='$HOME/aqua_tools/query_bedpe.sh'" >> $HOME/.bashrc && \
     echo "alias plot_virtual_4C='$HOME/aqua_tools/plot_virtual_4C.sh'" >> $HOME/.bashrc && \
     echo "export juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar" >> $HOME/.bashrc
 
+source ~/.bashrc
 ```
+#### Download and install example data
+```
+wget -O latest_aqua_tools.tar.gz "https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication.tar.gz?cache-bust=$(date +%s)" && \
+    tar -xzvf latest_aqua_tools.tar.gz && \
+    mv aqua_tools_publication/* . && \
+    rm -r aqua_tools_publication latest_aqua_tools.tar.gz
+```
+    
 #### Sample Data Formatting Requirements
 
 We use `.hic` files as the only format of data source. In addition, we need a `.mergeStats.txt` file containing valid interaction read counts for human and mouse genome alignments. This is a modified version of a typical `.mergestat` file (an output of the [HiC-Pro](https://github.com/nservant/HiC-Pro) pipeline) that contains QC information for human and mouse PETs in one file. A `.mergeStats.txt` file should look like the following:
