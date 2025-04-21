@@ -169,6 +169,8 @@ source ~/.bashrc
 ```
 #### Download and install example data
 ```
+cd $HOME
+
 wget -O latest_aqua_tools.tar.gz "https://convergence-beta-public.s3.amazonaws.com/aqua_tools_publication.tar.gz?cache-bust=$(date +%s)" && \
     tar -xzvf latest_aqua_tools.tar.gz && \
     mv aqua_tools_publication/* . && \
