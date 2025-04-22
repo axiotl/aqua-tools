@@ -19,7 +19,7 @@ function usage {
 function help {
     echo
     echo "Obtain clusters of interacting loops based on score threshold"
-    echo "Scores are calculated using inherent normalization (hello@axiotl.com)"
+    echo "Scores are calculated using inherent normalization"
     echo "Prints in bedpe format to standard out."
     echo
     echo "---------------"
