@@ -1109,35 +1109,46 @@ if(flag_inter == "FALSE"){
       
       no_def_ann <- FALSE
       no_cus_ann <- FALSE
+
+      base_depth <- 6.00
+      step_depth <- 0.25
       
       if(isFALSE(flag_profiles)){
-        # Initialize legend elements
+
         legend_labels <- c()
         legend_colors <- c()
-        
+
         # Default Annotation (TSS)
         if (ann_default) {
-          if (genome_build == "hg19") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "mm10") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "hg38") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
+          cat("\nDrawing default annotations\n")
+          # figure out how many custom annotation files there are
+          n_custom <- if (ann_custom != "NONE") {
+          length(unlist(strsplit(ann_custom, " ")))
+        } else {
+          0
+        }
+          
+        # compute dynamic TSS depth
+        if (n_custom > 0) {
+          tss_depth <- base_depth + step_depth * n_custom + step_depth
+          cat("\n")
+        } else {
+          # when no customs, bring closer to the diagonal
+          tss_depth <- base_depth + (2 * step_depth)
+        }
+        
+        if (genome_build == "hg19") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg19.bed")
+        } else if (genome_build == "mm10") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_200bp_mm10.bed")
+        } else if (genome_build == "hg38") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg38.bed")
+        }
+          
+        draw_bed(bed_tss, "#ef0000", tss_depth, TRUE)
+        legend_labels <- c(legend_labels, "transcription start sites")
+        legend_colors <- c(legend_colors, "#ef0000")
+
         } else {
           no_def_ann <- TRUE
         }
@@ -1145,60 +1156,67 @@ if(flag_inter == "FALSE"){
         # Custom Annotations
         if (ann_custom != "NONE") {
           # Split the annotation files string into a vector
-          annotation_files <- unlist(strsplit(ann_custom, " "))
-          
-          # Define default colors and track depths
-          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
-          track_depths <- c(6, 6.25, 6.5, 6.75)
-          
-          # Split provided custom colors if provided
-          if (ann_custom_colors != "NONE") {
-            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
-            # Add a '#' if not present
-            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
-          }
-          
-          for (i in seq_along(annotation_files)) {
-            current_file <- annotation_files[i]
-            
-            # Decide which color to use
-            if (ann_custom_colors == "NONE") {
-              this_color <- default_colors[i %% length(default_colors) + 1]
-              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+         annotation_files <- unlist(strsplit(ann_custom, " "))
+         n_files <- length(annotation_files)
+
+          # default base colors
+          base_colors <- c("#E69F00",  # orange 
+                  "#377EB8",  # blue  
+                  "#4DAF4A",  # green
+                  "#C77CFF",  # light purple    
+                  "#984EA3")  # purple
+
+          # build dynamic depths
+          track_depths <- seq(from = base_depth,
+                              by   = step_depth,
+                              length.out = n_files)
+
+          # build a color vector of exactly n_files
+          if (ann_custom_colors == "NONE") {
+            # ramp base colors out to n_files
+            final_colors <- colorRampPalette(base_colors)(n_files)
+          } else {
+            # split & sanitize any user-supplied ones
+            custom_colors <- strsplit(ann_custom_colors, " ")[[1]]
+            custom_colors <- sapply(custom_colors,
+                                      function(x) if (substr(x,1,1)=="#") x else paste0("#",x))
+            if (length(custom_colors) >= n_files) {
+              final_colors <- custom_colors[1:n_files]
             } else {
-              if (length(custom_colors) >= i) {
-                this_color <- custom_colors[i]
-              } else {
-                this_color <- default_colors[i %% length(default_colors) + 1]
-              }
-              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+              # fill the rest by ramping the base colors
+              extra <- n_files - length(custom_colors)
+              fill  <- colorRampPalette(base_colors)(extra)
+              final_colors <- c(custom_colors, fill)
             }
-            
-            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
-            
-            # Update legend
-            legend_labels <- c(legend_labels, basename(current_file))
-            legend_colors <- c(legend_colors, this_color)
+          }
+
+          # Loop and pick final_colors[i] every time
+          for (i in seq_along(annotation_files)) {
+            file  <- annotation_files[i]
+            color <- final_colors[i]
+            depth <- track_depths[i]
+
+            cat(sprintf("Drawing custom annotation for file %s with color %s \n", basename(file), color))
+            draw_bed(file, color, depth, FALSE)
+            legend_labels <- c(legend_labels, basename(file))
+            legend_colors <- c(legend_colors, color)
           }
         } else {
           no_cus_ann <- TRUE
         }
-        
+          
         # Draw legend
         if (length(legend_labels) > 0) {
           legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
-                 box.lty = 0, cex = 0.8, text.col = "#888888")
+                  box.lty = 0, cex = 0.8, text.col = "#888888")
         }
       }
       
       if( flag_profiles ){
-        
         draw_profiles( )
-        
       }
-      
+
       device_off <- dev.off()
-      
     }
     
     if(isTRUE(inherent)){
@@ -1377,96 +1395,114 @@ if(flag_inter == "FALSE"){
       
       no_def_ann <- FALSE
       no_cus_ann <- FALSE
+
+      base_depth <- 6.00
+      step_depth <- 0.25
       
       if(isFALSE(flag_profiles)){
-        # Initialize legend
+
         legend_labels <- c()
         legend_colors <- c()
-        
+
         # Default Annotation (TSS)
         if (ann_default) {
-          if (genome_build == "hg19") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "mm10") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "hg38") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
+          cat("\nDrawing default annotations\n")
+          # figure out how many custom annotation files there are
+          n_custom <- if (ann_custom != "NONE") {
+          length(unlist(strsplit(ann_custom, " ")))
+        } else {
+          0
+        }
+          
+        # compute dynamic TSS depth
+        if (n_custom > 0) {
+          tss_depth <- base_depth + step_depth * n_custom + step_depth
+          cat("\n")
+        } else {
+          # when no customs, bring closer to the diagonal
+          tss_depth <- base_depth + (2 * step_depth)
+        }
+        
+        if (genome_build == "hg19") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg19.bed")
+        } else if (genome_build == "mm10") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_200bp_mm10.bed")
+        } else if (genome_build == "hg38") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg38.bed")
+        }
+          
+        draw_bed(bed_tss, "#ef0000", tss_depth, TRUE)
+        legend_labels <- c(legend_labels, "transcription start sites")
+        legend_colors <- c(legend_colors, "#ef0000")
+
         } else {
           no_def_ann <- TRUE
         }
-      
+        
         # Custom Annotations
         if (ann_custom != "NONE") {
           # Split the annotation files string into a vector
-          annotation_files <- unlist(strsplit(ann_custom, " "))
-          
-          # Define default colors and track depths
-          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
-          track_depths <- c(6, 6.25, 6.5, 6.75)
-          
-          # Split custom colors if provided
-          if (ann_custom_colors != "NONE") {
-            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
-            # Add a '#' if not present
-            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
-          }
-          
-          for (i in seq_along(annotation_files)) {
-            current_file <- annotation_files[i]
-            
-            # Decide which color to use
-            if (ann_custom_colors == "NONE") {
-              this_color <- default_colors[i %% length(default_colors) + 1]
-              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+         annotation_files <- unlist(strsplit(ann_custom, " "))
+         n_files <- length(annotation_files)
+
+          # default base colors
+          base_colors <- c("#E69F00",  # orange 
+                  "#377EB8",  # blue  
+                  "#4DAF4A",  # green
+                  "#C77CFF",  # light purple    
+                  "#984EA3")  # purple
+
+          # build dynamic depths
+          track_depths <- seq(from = base_depth,
+                              by   = step_depth,
+                              length.out = n_files)
+
+          # build a color vector of exactly n_files
+          if (ann_custom_colors == "NONE") {
+            # ramp base colors out to n_files
+            final_colors <- colorRampPalette(base_colors)(n_files)
+          } else {
+            # split & sanitize any user-supplied ones
+            custom_colors <- strsplit(ann_custom_colors, " ")[[1]]
+            custom_colors <- sapply(custom_colors,
+                                      function(x) if (substr(x,1,1)=="#") x else paste0("#",x))
+            if (length(custom_colors) >= n_files) {
+              final_colors <- custom_colors[1:n_files]
             } else {
-              if (length(custom_colors) >= i) {
-                this_color <- custom_colors[i]
-              } else {
-                this_color <- default_colors[i %% length(default_colors) + 1]
-              }
-              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+              # fill the rest by ramping the base colors
+              extra <- n_files - length(custom_colors)
+              fill  <- colorRampPalette(base_colors)(extra)
+              final_colors <- c(custom_colors, fill)
             }
-            
-            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
-            
-            # Update legend
-            legend_labels <- c(legend_labels, basename(current_file))
-            legend_colors <- c(legend_colors, this_color)
+          }
+
+          # Loop and pick final_colors[i] every time
+          for (i in seq_along(annotation_files)) {
+            file  <- annotation_files[i]
+            color <- final_colors[i]
+            depth <- track_depths[i]
+
+            cat(sprintf("Drawing custom annotation for file %s with color %s \n", basename(file), color))
+            draw_bed(file, color, depth, FALSE)
+            legend_labels <- c(legend_labels, basename(file))
+            legend_colors <- c(legend_colors, color)
           }
         } else {
           no_cus_ann <- TRUE
         }
-        
+          
         # Draw legend
         if (length(legend_labels) > 0) {
           legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
-                 box.lty = 0, cex = 0.8, text.col = "#888888")
+                  box.lty = 0, cex = 0.8, text.col = "#888888")
         }
       }
       
       if( flag_profiles ){
-        
         draw_profiles( )
-        
       }
-      
+
       device_off <- dev.off()
-      
     }
   }
 }
@@ -1876,98 +1912,117 @@ if(flag_inter == "FALSE"){
       no_def_ann <- FALSE
       no_cus_ann <- FALSE
       
+      base_depth <- 6.00
+      step_depth <- 0.25
+
       if(isFALSE(flag_profiles)){
-        # Initialize legend elements
+
         legend_labels <- c()
         legend_colors <- c()
-        
+
         # Default Annotation (TSS)
         if (ann_default) {
-          if (genome_build == "hg19") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "mm10") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
-          if (genome_build == "hg38") {
-            cat("\nDrawing default annotations\n")
-            bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
-            draw_bed(bed_tss, "#ef0000", 7, TRUE)
-            legend_labels <- c(legend_labels, "transcription start sites")
-            legend_colors <- c(legend_colors, "#ef0000")
-          }
+          cat("\nDrawing default annotations\n")
+          # figure out how many custom annotation files there are
+          n_custom <- if (ann_custom != "NONE") {
+          length(unlist(strsplit(ann_custom, " ")))
         } else {
-          no_def_ann <- TRUE
+          0
         }
-        
+            
+        # compute dynamic TSS depth
+        if (n_custom > 0) {
+          tss_depth <- base_depth + step_depth * n_custom + step_depth
+          cat("\n")
+        } else {
+          # when no customs, bring closer to the diagonal
+          tss_depth <- base_depth + (2 * step_depth)
+        }
+          
+        if (genome_build == "hg19") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg19.bed")
+        } else if (genome_build == "mm10") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_200bp_mm10.bed")
+        } else if (genome_build == "hg38") {
+          bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg38.bed")
+        }
+            
+        draw_bed(bed_tss, "#ef0000", tss_depth, TRUE)
+        legend_labels <- c(legend_labels, "transcription start sites")
+        legend_colors <- c(legend_colors, "#ef0000")
+
+        } else {
+            no_def_ann <- TRUE
+        }
+          
         # Custom Annotations
         if (ann_custom != "NONE") {
           # Split the annotation files string into a vector
           annotation_files <- unlist(strsplit(ann_custom, " "))
-          
-          # Define default colors and track depths
-          default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
-          track_depths <- c(6, 6.25, 6.5, 6.75)
-          
-          # If the user provided custom colors, split those as well
-          if (ann_custom_colors != "NONE") {
-            custom_colors <- unlist(strsplit(ann_custom_colors, " "))
-            # Add a '#' if not present
-            custom_colors <- sapply(custom_colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
-          }
-          
-          for (i in seq_along(annotation_files)) {
-            current_file <- annotation_files[i]
-            
-            # Decide which color to use
-            if (ann_custom_colors == "NONE") {
-              this_color <- default_colors[i %% length(default_colors) + 1]
-              cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
+          n_files <- length(annotation_files)
+
+          # default base colors
+          base_colors <- c("#E69F00",  # orange 
+                "#377EB8",  # blue  
+                "#4DAF4A",  # green
+                "#C77CFF",  # light purple    
+                "#984EA3")  # purple
+
+          # build dynamic depths
+          track_depths <- seq(from = base_depth,
+                              by   = step_depth,
+                              length.out = n_files)
+
+          # build a color vector of exactly n_files
+          if (ann_custom_colors == "NONE") {
+            # ramp base colors out to n_files
+            final_colors <- colorRampPalette(base_colors)(n_files)
+          } else {
+            # split & sanitize any user-supplied ones
+            custom_colors <- strsplit(ann_custom_colors, " ")[[1]]
+            custom_colors <- sapply(custom_colors,
+                                      function(x) if (substr(x,1,1)=="#") x else paste0("#",x))
+            if (length(custom_colors) >= n_files) {
+              final_colors <- custom_colors[1:n_files]
             } else {
-              if (length(custom_colors) >= i) {
-                this_color <- custom_colors[i]
-              } else {
-                this_color <- default_colors[i %% length(default_colors) + 1]
-              }
-              cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
+              # fill the rest by ramping the base colors
+              extra <- n_files - length(custom_colors)
+              fill  <- colorRampPalette(base_colors)(extra)
+              final_colors <- c(custom_colors, fill)
             }
-            
-            draw_bed(current_file, this_color, track_depths[i %% length(track_depths) + 1], FALSE)
-            
-            # Update legend
-            legend_labels <- c(legend_labels, basename(current_file))
-            legend_colors <- c(legend_colors, this_color)
+          }
+
+          # Loop and pick final_colors[i] every time
+          for (i in seq_along(annotation_files)) {
+            file  <- annotation_files[i]
+            color <- final_colors[i]
+            depth <- track_depths[i]
+
+            cat(sprintf("Drawing custom annotation for file %s with color %s \n", basename(file), color))
+            draw_bed(file, color, depth, FALSE)
+            legend_labels <- c(legend_labels, basename(file))
+            legend_colors <- c(legend_colors, color)
           }
         } else {
           no_cus_ann <- TRUE
         }
-        
+          
         # Draw legend
         if (length(legend_labels) > 0) {
           legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
-                 box.lty = 0, cex = 0.8, text.col = "#888888")
+                box.lty = 0, cex = 0.8, text.col = "#888888")
         }
-      }
+      }  
       
       if( flag_profiles ){
-        
         draw_profiles( )
       }
+
       device_off <- dev.off()
     }
     
     if(isTRUE(inherent)){
-      
       cat("\n--inherent TRUE is currently only available for one sample tests only.\n")
-      
     }
   }
 }
