@@ -126,7 +126,7 @@ union_bedpe <- function(bedpe1,bedpe2){
   
   # assign unique ids to multi m-n overlaps
   g               <- graph_from_data_frame(multi_overlaps, directed = T)
-  clusters        <- components(g)
+  clusters        <- igraph::components(g)
   cluster_members <- split(V(g)$name, clusters$membership)
   cluster_df      <- data.frame(
     cluster = rep(names(cluster_members), lengths(cluster_members)),
