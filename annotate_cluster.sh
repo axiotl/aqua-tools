@@ -217,7 +217,7 @@ for cluster in $clusters; do
 
     # 3. query_bedpe
     $aqua_dir/query_bedpe.sh \
-     --pair $temp_dir/"${cluster}_subset.bedpe" \
+     --bedpe $temp_dir/"${cluster}_subset.bedpe" \
      --sample1 $A \
      --genome $G \
      --resolution 5000 > $temp_dir/"${cluster}_subset_C-annotated.bedpe"
