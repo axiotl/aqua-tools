@@ -222,7 +222,7 @@ for cluster in $clusters; do
      --genome $G \
      --resolution 5000 > $temp_dir/"${cluster}_subset_C-annotated.bedpe"
 
-    total_count=$(awk '{sum += $7} END {print sum}' $temp_dir/"${cluster}_subset_C-annotated.bedpe")
+    total_count=$(awk '{sum += $8} END {print sum}' $temp_dir/"${cluster}_subset_C-annotated.bedpe")
 
 
     # 4. summarise_interval
