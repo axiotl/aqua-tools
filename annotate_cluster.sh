@@ -128,6 +128,11 @@ then
     exit
 fi
 
+if [[ ! -f "$P" ]]; then
+    echo "Bedpe file not found at path '$P'"
+    exit 1
+fi
+
 if [[ -z $A ]];
 then
     usage
@@ -151,6 +156,11 @@ if [[ -z $B ]];
 then
     usage
     exit
+fi
+
+if [[ ! -f "$B" ]]; then
+    echo "Peaks file not found at path '$B'"
+    exit 1
 fi
 
 
