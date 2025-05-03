@@ -5,10 +5,7 @@
 ## Table of Contents
 - [About](#about)
 - [Installation](#installation)
-- [Docker Recipe](#docker-recipe)
-  - [Getting Started](#getting-started)
-  - [Loop Calling](#i-loop-calling)
-  - [Visualization](#ii-visualization)
+- [Tools and Recipes](#tools-and-recipes)
 - [License](#license)
 
 
@@ -71,17 +68,17 @@ Similar to [Tinker](https://tinker.axiotl.com/public), the container built using
 ```bash
 working_dir=$HOME/aqua_tools_container  # <-- change this path as per your convenience
 mkdir -p $working_dir
-cd $working_dir                         # <-- place the Dockerfile from GitHub in this directory
+cd $working_dir
 ```
 
-#### Step 2: Build the image
+#### Step 2: Pull the image from Docker Hub 
 ```bash
-docker build -t aqua_tools .       # This can take up to 30 minutes
+docker pull axiotl/aqua-tools
 ```
 
 #### Step 3: Run the container
 ```bash
-docker run -it -v $working_dir:/home/ubuntu/container_outputs aqua_tools
+docker run -it -v $working_dir:/home/ubuntu/container_outputs axiotl/aqua-tools
 ```
 
 **Note**: Keep all outputs in `~/container_outputs` to access them after exiting the container.
@@ -206,141 +203,24 @@ If sample name is `GM12878`, the data structure should look like:
        ++ GM12878.mergeStats.txt
 ```
 
-## Docker Recipe
-All AQuA tools are executable from anywhere inside the Docker container. The container mimics [Tinker](https://tinker.axiotl.com/), a cloud platform built from ground up for 3D genomics analyses.
-Detailed material on how to use the tools can be found at our [Docs](https://docs.axiotl.com/).
+## Tools and Recipes
 
-### Getting Started
-View available samples:
-```bash
-list_samples
-```
+You can find detailed concept tutorials and usage instructions for each tool in our [Docs](https://docs.axiotl.com/tools/).
 
-List available tools:
-```bash
-list_tools
-```
+Additionally, we've created a series of guided workflows we call "recipes". Each one walks through a specific analysis task using AQuA-tools.
 
-### I. Loop Calling
-We use `extract_bedpe` to call loops using a sample of interest. The tool supports both regional and genome-wide loop calling.
+[Recipe 00: Assessing differences in interactions between peaks](https://docs.axiotl.com/recipes/recipe_00/)  
+Designed for the local installation of AQuA-tools. Highlights the use of AQuA normalization for exploring differences in interaction strength using `build_bedpe`, `intersect_bedpe`, `query_bedpe`, `union_bedpe` and `plot_APA`.
 
-#### Loop calling for a range/interval:
-```bash
-sample=K562_H3K27ac
-genome=hg38
-range=chr8:127000000:130000000      # <-- MYC locus
-output_dir=/home/ubuntu/container_outputs
-extract_bedpe \
- --sample1 $sample \
- --genome $genome \
- --range $range > $output_dir/MYC.bedpe
-```
+[Recipe 01: Calling loops from a sample](https://docs.axiotl.com/recipes/recipe_01/)  
+For use in Docker or Tinker environments. Demonstrates how to call genome-wide loops from `.hic` files using `extract_bedpe` and visualize with `plot_contacts`.
 
+[Recipe 02: Creating meaningful subsets](https://docs.axiotl.com/recipes/recipe_02/)  
+Shows how to filter, compare, and visualize loop subsets using the tools `intersect_bedpe` , `query_bedpe`, `union_bedpe`, and `plot_APA`.
 
-#### Loop calling genome-wide:
-```bash
-# This can take up to 30 minutes
+[Recipe 03: Making sense of loop networks](https://docs.axiotl.com/recipes/recipe_03/)  
+Focuses on clustering loops and annotating them with biological context using `cluster_bedpe` and `annotate_cluster`.
 
-sample=K562_H3K27ac
-genome=hg38
-output_dir=/home/ubuntu/container_outputs
-TAD_file=/home/ubuntu/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
-extract_bedpe \
- --sample1 $sample \
- --genome $genome \
- --TAD $TAD_file > $output_dir/K562_genome-wide-loops.bedpe
-```
-
-### II. Visualization
-Generate visual representations of genomic regions with loop overlay:
-
-```bash
-sample=K562_H3K27ac
-genome=hg38
-range=chr8:127000000:130000000
-output_dir=/home/ubuntu/container_outputs
-plot_contacts \
- --sample1 $sample \
- --genome $genome \
- --range $range \
- --bedpe $output_dir/MYC.bedpe \
- --resolution 10000 \
- --output_name $output_dir/MYC.pdf
-```
-
-### III. Differential loops
-
-#### Pre-loaded samples
-```
-# [type list_samples to view sample names]
-sample1=RH4_DMSO_H3K27ac
-sample2=RH4_HDACi_H3K27ac
-genome_build=hg38
-resolution=5000
-
-# invariant reference TAD file 
-TAD_file=~/lab-data/hg38/reference/TAD_goldsorted_span_centromeres-removed_hg38.bed
-```
-#### Call genome-wide loops for each sample
-NOTE: this step takes a while, therefore the genome-wide loop files below are already pre-comupted in ~/genome-wide_loops.
-```
-extract_bedpe \
- --sample1 $sample1 \
- --genome $genome_build \
- --TAD $TAD_file \
- --resolution $resolution \
- --min_dist 15000 > "$sample1"_gw-loops_"$genome_build".bedpe
-
-extract_bedpe \
- --sample1 $sample2 \
- --genome $genome_build \
- --TAD $TAD_file \
- --resolution $resolution \
- --min_dist 15000 > "$sample2"_gw-loops_"$genome_build".bedpe
-```
-#### Merge the called genome-wide loops into one file
-```
-union_bedpe \
- --bedpe "$sample1"_gw-loops_"$genome_build".bedpe \
- --bedpe "$sample2"_gw-loops_"$genome_build".bedpe > union_scaffold.bedpe
-```
-#### Cluster the unioned scaffold to obtain bedpe membership
-```
-cluster_bedpe \
- --bedpe union_scaffold.bedpe > union_scaffold_clustered.bedpe
-```
-#### Annotate union scaffold bedpe with contact values
-```
-query_bedpe \
- --bedpe union_scaffold_clustered.bedpe \
- --sample1 $sample1 \
- --sample2 $sample2 \
- --genome $genome_build \
- --resolution $resolution \
- --formula max \
- --inherent TRUE > union_scaffold_inh-annotated.bedpe
-```
-#### Threshold with standard inherent score 1 
-```
-awk '$NF>= 1{print $0}' union_scaffold_inh-annotated.bedpe > loop-gains.bedpe
-awk '$NF<=-1{print $0}' union_scaffold_inh-annotated.bedpe > loop-losses.bedpe
-```
-#### Visualise gains and losses using APA plotting
-```
-plot_APA \
- --bedpe loop-gains.bedpe \
- --sample1 $sample1 \
- --sample2 $sample2 \
- --genome $genome_build \
- --out-dir ~/container_outputs/gains
-
-plot_APA \
- --bedpe loop-losses.bedpe \
- --sample1 $sample1 \
- --sample2 $sample2 \
- --genome $genome_build \
- --out-dir ~/container_outputs/losses
-```
 
 ## License
 AQuA tools is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License v3.0.
