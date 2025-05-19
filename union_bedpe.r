@@ -77,7 +77,6 @@ makeGInteractionsFromDataFrame <- function(df, keep.extra.columns = FALSE, start
 
 union_bedpe <- function(bedpe1,bedpe2){
   
-  
   # add offset of 1bp to not merge bedpes that are side-by-side
   bedpe2_offset     <- bedpe2
   offset            <- 1
@@ -107,22 +106,21 @@ union_bedpe <- function(bedpe1,bedpe2){
   ##################################################################
   
   # identify multi m-n overlap intersection indices 
-  overlaps$x <- 0
-  overlaps$y <- 0
-  
-  for(i in 1:nrow(overlaps)){
-    if(overlaps[i,"queryHits"] %in% unique(overlaps$queryHits[duplicated(overlaps$queryHits)])){
-      overlaps[i,"x"] <- 1
-    }
-    if(overlaps[i,"subjectHits"] %in% unique(overlaps$subjectHits[duplicated(overlaps$subjectHits)])){
-      overlaps[i,"y"] <- 1
-    }
+  dupQ <- overlaps$queryHits[duplicated(overlaps$queryHits)]
+  dupS <- overlaps$subjectHits[duplicated(overlaps$subjectHits)]
+
+  # vectorized tagging: TRUE=1, FALSE=0
+  overlaps$x <- as.integer(overlaps$queryHits %in% dupQ)
+  overlaps$y <- as.integer(overlaps$subjectHits  %in% dupS)
+
+  # keep any row where x or y is 1
+  multi_overlaps <- overlaps[overlaps$x != 0 | overlaps$y != 0, 1:2]
+
+  # append the suffixes
+  if (nrow(multi_overlaps) > 0) {
+    multi_overlaps$queryHits   <- paste0(multi_overlaps$queryHits,  "-1")
+    multi_overlaps$subjectHits <- paste0(multi_overlaps$subjectHits, "-2")
   }
-  
-  multi_overlaps             <- overlaps[overlaps$x != 0 | overlaps$y != 0, 1:2]
-  multi_overlaps$queryHits   <- paste(multi_overlaps$queryHits,  "-1", sep="")
-  multi_overlaps$subjectHits <- paste(multi_overlaps$subjectHits,"-2", sep="")
-  
   
   # assign unique ids to multi m-n overlaps
   g               <- graph_from_data_frame(multi_overlaps, directed = T)
@@ -132,86 +130,69 @@ union_bedpe <- function(bedpe1,bedpe2){
     cluster = rep(names(cluster_members), lengths(cluster_members)),
     index = unlist(cluster_members) )
   
-  
   # obtain new coordinates for multi m-n overlaps
   clusters     <- unique(cluster_df$cluster)
-  multi_unions <- data.frame()
-  for(cluster in clusters){
-    
-    df <- cluster_df[cluster_df$cluster == cluster,]
-    
-    split_data <- do.call(rbind, strsplit(as.character(df$index), "-", fixed = TRUE))
-    
-    df$index <- as.numeric(split_data[, 1])
-    df$file  <- as.numeric(split_data[, 2])
-    
-    file1 <- bedpe1[as.vector(df[df$file == 1,"index"]),] 
-    file2 <- bedpe2[as.vector(df[df$file == 2,"index"]),] 
-    
-    comb <- rbind(file1[,1:6],file2[,1:6])
-    
-    chr <- unique(comb[,1],comb[,4])
-    
-    new_start1 <- min(comb[,2])
-    new_end1   <- max(comb[,3])
-    
-    new_start2 <- min(comb[,5])
-    new_end2   <- max(comb[,6])
-    
-    tmp <- data.frame(
-      chr1=chr,
-      start1=new_start1,
-      end1=new_end1,
-      chr2=chr,
-      start2=new_start2,
-      end2=new_end2
+
+  multi_list <- vector("list", length(clusters))
+
+  for (j in seq_along(clusters)) {
+    clust_id <- clusters[j]
+    df_clust <- cluster_df[cluster_df$cluster == clust_id, ]
+    parts    <- do.call(rbind, strsplit(as.character(df_clust$index), "-", fixed = TRUE))
+    df_clust$index <- as.numeric(parts[,1])
+    df_clust$file  <- as.numeric(parts[,2])
+
+    idx1  <- df_clust$index[df_clust$file == 1]
+    idx2  <- df_clust$index[df_clust$file == 2]
+    file1 <- bedpe1[idx1, 1:6]
+    file2 <- bedpe2[idx2, 1:6]
+
+    comb  <- rbind(file1, file2)
+
+    chr <- unique(c(comb[,1], comb[,4]))
+    multi_list[[j]] <- data.frame(
+      chr1   = chr,
+      start1 = min(comb[,2]),
+      end1   = max(comb[,3]),
+      chr2   = chr,
+      start2 = min(comb[,5]),
+      end2   = max(comb[,6])
     )
-    
-    multi_unions <- rbind(multi_unions,tmp) ; rm(tmp, comb, file1,file2,df)
   }
-  
+
+  multi_unions <- do.call(rbind, multi_list)
   
   #################################################################
   ##                     Simple 1-1 Overlaps                     ##
   #################################################################
   
   single_overlaps  <- overlaps[overlaps$x == 0 & overlaps$y == 0,1:2]
-  
-  single_unions <- data.frame()
-  for(i in 1:nrow(single_overlaps)){
-    
-    comb <- rbind(
-      bedpe1[single_overlaps[i,1],],
-      bedpe2[single_overlaps[i,2],] )
-    
-    chr <- unique(comb[,1],comb[,4])
-    
-    new_start1 <- min(comb[,2])
-    new_end1   <- max(comb[,3])
-    
-    new_start2 <- min(comb[,5])
-    new_end2   <- max(comb[,6])
-    
-    tmp <- data.frame(
-      chr1=chr,
-      start1=new_start1,
-      end1=new_end1,
-      chr2=chr,
-      start2=new_start2,
-      end2=new_end2
+  single_list     <- vector("list", nrow(single_overlaps))
+
+  for (i in seq_len(nrow(single_overlaps))) {
+    idx1 <- single_overlaps[i,1]
+    idx2 <- single_overlaps[i,2]
+    comb <- rbind(bedpe1[idx1, ], bedpe2[idx2, ])
+
+    chr <- unique(c(comb[,1], comb[,4]))
+    single_list[[i]] <- data.frame(
+      chr1   = chr,
+      start1 = min(comb[,2]),
+      end1   = max(comb[,3]),
+      chr2   = chr,
+      start2 = min(comb[,5]),
+      end2   = max(comb[,6])
     )
-    
-    single_unions <- rbind(single_unions,tmp) ; rm(tmp, comb)
   }
-  
-  
+
+  single_unions <- do.call(rbind, single_list)
+
   ##################################################################
   ##                         Non Overlaps                         ##
   ##################################################################
   
   non_overlaps_bedpe1 <- setdiff(1:nrow(bedpe1), unique(overlaps$queryHits))
   non_overlaps_bedpe2 <- setdiff(1:nrow(bedpe2), unique(overlaps$subjectHits))
-  
   
   non_overlaps <- rbind(
     bedpe1[non_overlaps_bedpe1,],
@@ -220,7 +201,6 @@ union_bedpe <- function(bedpe1,bedpe2){
   colnames(non_overlaps) <- c(
     "chr1", "start1", "end1",
     "chr2", "start2", "end2")
-  
   
   final_bedpe <- rbind(
     multi_unions, 
@@ -256,7 +236,3 @@ union <- union_bedpe(
 for( i in 1:nrow(union) ){ 
   try(cat( paste( union[i,], collapse = "\t"), "\n", sep = "" ), silent=TRUE) 
 }
-
-
-
-
