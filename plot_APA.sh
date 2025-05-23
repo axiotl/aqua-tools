@@ -460,7 +460,7 @@ if [ "$two_sample" == "FALSE" ] ; then
 
     # Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
     echo -e "\nBeginning APA...\n"
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$P" "$out_dir" &> /dev/null
+    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
 
     out_mat=$out_dir/$r/gw/APA.txt
     
