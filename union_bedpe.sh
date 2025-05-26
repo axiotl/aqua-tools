@@ -132,7 +132,6 @@ for bedpe in "${BEDPE_FILES[@]}"; do
     }' "$bedpe" > "$temp_dir/$(basename "$bedpe")"
 
     if [ $? -ne 0 ]; then
-        echo "Validation failed for '$bedpe'"
         exit 1
     fi
 done
