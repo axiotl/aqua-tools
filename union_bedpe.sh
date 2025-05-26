@@ -88,14 +88,55 @@ fi
 
 
 for bedpe in "${BEDPE_FILES[@]}"; do
-
     if [ ! -f "$bedpe" ]; then
-            echo "Error: File $bedpe not found"
-            exit 1
+        echo "Error: File '$bedpe' not found"
+        exit 1
     fi
 
-    cut -f 1-6 $bedpe > $temp_dir/$(basename $bedpe)
+    awk -v fname="$bedpe" '
+    BEGIN {
+        OFS = "\t"
+    }
+    {
+        # Check for tab separator
+        if ($0 !~ /\t/) {
+            print "BEDPE error in file " fname ": does not contain tab-separated values on line " NR | "cat 1>&2";
+            exit 1;
+        }
+
+        # Remove carriage return (\r) from all fields if present
+        for (i = 1; i <= NF; i++) gsub(/\r$/, "", $i);
+
+        # Validate the format of the BEDPE file
+        if (NR == 1) {
+            if (!($1 ~ /^chr/ && $4 ~ /^chr/ && $2+0 == $2 && $3+0 == $3 && $5+0 == $5 && $6+0 == $6)) {
+                print "BEDPE error in file " fname ": expected format not found on line " NR ". Expected chr1 start1 end1 chr2 start2 end2" | "cat 1>&2";
+                exit 1;
+            }
+        }
+
+        # Check if the start is less than the end for both intervals
+        if ($2 > $3 || $5 > $6) {
+            print "BEDPE error in file " fname ": start coordinate is greater than end coordinate on line " NR | "cat 1>&2";
+            exit 1;
+        }
+
+        # Canonical ordering: swap if needed
+        if ($2 > $5 || ($2 == $5 && $3 > $6)) {
+            temp1 = $1; temp2 = $2; temp3 = $3;
+            $1 = $4; $2 = $5; $3 = $6;
+            $4 = temp1; $5 = temp2; $6 = temp3;
+        }
+
+        print $1, $2, $3, $4, $5, $6
+    }' "$bedpe" > "$temp_dir/$(basename "$bedpe")"
+
+    if [ $? -ne 0 ]; then
+        echo "Validation failed for '$bedpe'"
+        exit 1
+    fi
 done
+
 
 
 temp_bedpe_files=($temp_dir/*.bedpe)
