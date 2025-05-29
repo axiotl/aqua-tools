@@ -106,15 +106,18 @@ if(analysis_type == "range"){
   
   colnames(tad_matrix) <- seq(interval_start,interval_end,bin_size)
   rownames(tad_matrix) <- seq(interval_start,interval_end,bin_size)
-  
-  for( i in 1:nrow(sparMat)){
-    tad_matrix[
-      as.character(sparMat[i,"x"]),
-      as.character(sparMat[i,"y"])] <- sparMat[i,"counts"]
-    tad_matrix[
-      as.character(sparMat[i,"y"]),
-      as.character(sparMat[i,"x"])] <- sparMat[i,"counts"]
-  }
+
+  pos <- rownames(tad_matrix)
+
+  # convert every sparMat$x and sparMat$y into integer row/col indices
+  i1 <- match(as.character(sparMat[ , "x"]), pos)
+  j1 <- match(as.character(sparMat[ , "y"]), pos)
+
+  # bulk-assign counts into the upper triangle in one C-level call
+  tad_matrix[cbind(i1, j1)] <- sparMat[ , "counts"]
+
+  # mirror for lower triangle
+  tad_matrix[cbind(j1, i1)] <- sparMat[ , "counts"]
   
   power_law_path <- list.files(
     sample_dir,
@@ -159,32 +162,45 @@ if(analysis_type == "range"){
   
   # Remove background
   tad_matrix_bg_removed <- tad_matrix
-  
-  for ( j in 0:(ncol(tad_matrix) - 1) ){
-    for ( i in 1:(nrow(tad_matrix)-j) ){
-      tad_matrix_bg_removed[i  ,i+j  ] <-
-        tad_matrix[i,i+j  ] - background[j+1]
-    }
-  }
+
+  # n = number of bins = nrow = ncol of tad_matrix
+  n   <- ncol(tad_matrix)
+
+  # compute offset for every [i,j] cell: 0 on diagonal
+  off <- col(tad_matrix) - row(tad_matrix)
+
+  # map offsets to background indices, clamp lower triangle to 1
+  idx          <- off + 1
+  idx[ idx < 1 ] <- 1
+
+  # build a full matrix of background values
+  bg_mat      <- matrix(background[idx], nrow = n, ncol = n)
+  bg_mat[ off < 0 ] <- 0
+
+  # subtract in one vectorized step
+  tad_matrix_bg_removed <- tad_matrix - bg_mat
   
   # Standardize
   tad_matrix_sd <- tad_matrix_bg_removed
-  
-  for ( j in 0:(ncol(tad_matrix_bg_removed) - 1) ){
-    for ( i in 1:(nrow(tad_matrix_bg_removed)-j) ){
-      tad_matrix_sd[i  ,i+j  ] <-
-        tad_matrix_bg_removed[i ,i+j  ] / (foreground[j+1] - background[j+1])
-    }
-  }
-  
+
+  # compute the per-offset denominator vector
+  denom <- foreground - background
+
+  # map each cell offset to the correct denom entry
+  idx       <- off + 1
+  idx[idx < 1] <- 1
+  den_mat   <- matrix(denom[idx], nrow = n, ncol = n)
+  den_mat[off < 0] <- 1        # so lower-triangle divisions are by 1
+
+  # vectorized divide
+  tad_matrix_sd <- tad_matrix_bg_removed / den_mat
+
   A <- tad_matrix_sd
-  for(i in 2:nrow(A)){
-    for(j in 1:(i-1)){
-      A[i,j] <- 0
-    }
-  }
   
+  # zero out lower triangle
+  A[lower.tri(A)] <- 0
   
+
   if(mode == "loop"){
     A <- zero_diag(A,1)
     A[A < score] <- 0
@@ -529,13 +545,8 @@ if(analysis_type == "range"){
       } else {
         trap <- 1 # do nothing
       }
-      
-      
-      
-      
     }
   }
-  
 }
 
 if(analysis_type == "TAD"){
@@ -646,14 +657,17 @@ if(analysis_type == "TAD"){
     colnames(tad_matrix) <- seq(interval_start,interval_end,bin_size)
     rownames(tad_matrix) <- seq(interval_start,interval_end,bin_size)
     
-    for( i in 1:nrow(sparMat)){
-      tad_matrix[
-        as.character(sparMat[i,"x"]),
-        as.character(sparMat[i,"y"])] <- sparMat[i,"counts"]
-      tad_matrix[
-        as.character(sparMat[i,"y"]),
-        as.character(sparMat[i,"x"])] <- sparMat[i,"counts"]
-    }
+    pos <- rownames(tad_matrix)
+
+    # convert every sparMat$x and sparMat$y into integer row/col indices
+    i1 <- match(as.character(sparMat[ , "x"]), pos)
+    j1 <- match(as.character(sparMat[ , "y"]), pos)
+
+    # bulk-assign counts into the upper triangle in one C-level call
+    tad_matrix[cbind(i1, j1)] <- sparMat[ , "counts"]
+
+    # mirror for lower triangle
+    tad_matrix[cbind(j1, i1)] <- sparMat[ , "counts"]
     
     if(nrow(power_laws) < ncol(tad_matrix)){
       
@@ -671,30 +685,43 @@ if(analysis_type == "TAD"){
     
     # Remove background
     tad_matrix_bg_removed <- tad_matrix
-    
-    for ( j in 0:(ncol(tad_matrix) - 1) ){
-      for ( i in 1:(nrow(tad_matrix)-j) ){
-        tad_matrix_bg_removed[i  ,i+j  ] <-
-          tad_matrix[i,i+j  ] - background[j+1]
-      }
-    }
+
+    # n = number of bins = nrow = ncol of tad_matrix
+    n   <- ncol(tad_matrix)
+
+    # compute offset for every [i,j] cell: 0 on diagonal
+    off <- col(tad_matrix) - row(tad_matrix)
+
+    # map offsets to background indices, clamp lower triangle to 1
+    idx          <- off + 1
+    idx[ idx < 1 ] <- 1
+
+    # build a full matrix of background values
+    bg_mat      <- matrix(background[idx], nrow = n, ncol = n)
+    bg_mat[ off < 0 ] <- 0
+
+    # subtract in one vectorized step
+    tad_matrix_bg_removed <- tad_matrix - bg_mat
     
     # Standardize
     tad_matrix_sd <- tad_matrix_bg_removed
     
-    for ( j in 0:(ncol(tad_matrix_bg_removed) - 1) ){
-      for ( i in 1:(nrow(tad_matrix_bg_removed)-j) ){
-        tad_matrix_sd[i  ,i+j  ] <-
-          tad_matrix_bg_removed[i ,i+j  ] / (foreground[j+1] - background[j+1])
-      }
-    }
-    
+    # compute the per-offset denominator vector
+    denom <- foreground - background
+
+    # map each cell offset to the correct denom entry
+    idx       <- off + 1
+    idx[idx < 1] <- 1
+    den_mat   <- matrix(denom[idx], nrow = n, ncol = n)
+    den_mat[off < 0] <- 1        # so lower-triangle divisions are by 1
+
+    # vectorized divide
+    tad_matrix_sd <- tad_matrix_bg_removed / den_mat
+
     A <- tad_matrix_sd
-    for(i in 2:nrow(A)){
-      for(j in 1:(i-1)){
-        A[i,j] <- 0
-      }
-    }
+    
+    # zero out lower triangle
+    A[lower.tri(A)] <- 0
     
     
     if(mode == "loop"){
@@ -1042,12 +1069,7 @@ if(analysis_type == "TAD"){
         } else {
           trap <- 1 # do nothing
         }
-        
-        
-        
-        
       }
     }
   }
-  
 }
