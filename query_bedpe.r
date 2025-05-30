@@ -1006,8 +1006,6 @@ if( length(args) == 17 ){
   } else {
     num_cores <- as.integer(num_cores)
   }
-
-  message("Using ", num_cores, " num_cores ")
   
   hic_A_chroms      <-  readHicChroms(hic_A)$name
   
@@ -1065,8 +1063,6 @@ if( length(args) == 20 ){
   } else {
     num_cores <- as.integer(num_cores)
   }
-
-  message("Using ", num_cores, " num_cores ")
   
   hic_A_chroms      <- readHicChroms(hic_A)$name
   hic_B_chroms      <- readHicChroms(hic_B)$name
