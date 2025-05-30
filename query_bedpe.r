@@ -1,7 +1,5 @@
 suppressPackageStartupMessages( library(strawr  ) )
 suppressPackageStartupMessages( library(parallel) )
-      
-cores <- detectCores() - 1
 
 options(scipen = 999)
 
@@ -974,12 +972,14 @@ zero_diag <- function( matrix, width ){
 #################################################################
 
 args        <- commandArgs( trailingOnly = TRUE )
+print(args)
+
 path_pairs  <- args[1]
 bin_size    <- as.numeric(args[2])
 norm        <- "NONE"
 flag_debug  <- FALSE
 
-if( length(args) == 16 ){
+if( length(args) == 17 ){
   
   one_sample_analysis <-  TRUE
   two_sample_analysis <- FALSE
@@ -998,6 +998,16 @@ if( length(args) == 16 ){
   flag_inherent      <-  args[14]
   sample_dir         <-  args[15]
   flag_meta_string   <-  args[16]
+  num_cores          <-  args[17]
+
+  if (num_cores == "blank") {
+    # auto-detect
+    num_cores <- detectCores() - 1
+  } else {
+    num_cores <- as.integer(num_cores)
+  }
+
+  message("Using ", num_cores, " num_cores ")
   
   hic_A_chroms      <-  readHicChroms(hic_A)$name
   
@@ -1025,7 +1035,7 @@ if( length(args) == 16 ){
 
 
 
-if( length(args) == 19 ){
+if( length(args) == 20 ){
   
   one_sample_analysis <- FALSE
   two_sample_analysis <-  TRUE
@@ -1047,6 +1057,16 @@ if( length(args) == 19 ){
   sample_dir_B      <-  args[17]
   flag_meta_string  <-  args[18]
   flag_inherent     <-  args[19]
+  num_cores         <-  args[20]
+
+  if (num_cores == "blank") {
+    # auto-detect
+    num_cores <- detectCores() - 1
+  } else {
+    num_cores <- as.integer(num_cores)
+  }
+
+  message("Using ", num_cores, " num_cores ")
   
   hic_A_chroms      <- readHicChroms(hic_A)$name
   hic_B_chroms      <- readHicChroms(hic_B)$name
@@ -1243,7 +1263,7 @@ repeat {
           hic_path = hic_A
         )
         round(result, 4)
-      }, mc.cores = cores)
+      }, mc.cores = num_cores)
 
       # Convert the list of results directly to a vector
       get_c_results_vector <- unlist(get_c_results)
@@ -1277,7 +1297,7 @@ repeat {
     } else {
       
       A  <-  apply( pairs, 1, prefix_filter_bedpe )
-      B  <-  mclapply( A, call_one_sample_straw_bedpe, mc.cores = cores, flag_inherent, flag_fix, formula, norm_factor1, aqua_factor1, shrink_wrap, split )
+      B  <-  mclapply( A, call_one_sample_straw_bedpe, mc.cores = num_cores, flag_inherent, flag_fix, formula, norm_factor1, aqua_factor1, shrink_wrap, split )
       
       if( isTRUE(flag_fix) ){
         
@@ -1435,7 +1455,7 @@ repeat {
           sample_B = round(result_sample_B, 4),
           delta = round(delta, 4)
         )
-      }, mc.cores = cores)
+      }, mc.cores = num_cores)
       
       # Convert the list of vectors to a data frame
       get_c_results_df <- do.call(rbind, get_c_results)
@@ -1464,7 +1484,7 @@ repeat {
       }
     } else {
       A <- apply( pairs, 1, prefix_filter_bedpe )
-      B <- mclapply( A, call_two_sample_straw_bedpe, mc.cores = cores, flag_inherent, flag_fix, formula, norm_factor1, aqua_factor1, norm_factor2, aqua_factor2 )
+      B <- mclapply( A, call_two_sample_straw_bedpe, mc.cores = num_cores, flag_inherent, flag_fix, formula, norm_factor1, aqua_factor1, norm_factor2, aqua_factor2 )
       
       if( isTRUE(flag_fix) ){
         
