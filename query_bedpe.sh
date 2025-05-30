@@ -49,6 +49,7 @@ function help {
     echo "  [    --expand        ] : Expands bedpe feet in both directions by supplied value in base pairs. Default 0"
     echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default FALSE"
     echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default TRUE"
+    echo "  [ -c|--cores         ] : Number of cores to use, default is determined automatically"
     echo "  [ -h|--help          ] : Help message"
     exit;
 }
@@ -76,6 +77,7 @@ for arg in "$@"; do
       "--expand")        set -- "$@" "-e" ;; 
       "--inherent")      set -- "$@" "-i" ;;
       "--preserve_meta") set -- "$@" "-m" ;;
+      "--cores")         set -- "$@" "-c" ;;
       "--help")          set -- "$@" "-h" ;;
        *)                set -- "$@" "$arg"
   esac
@@ -94,8 +96,9 @@ i=FALSE
 m=TRUE
 H=blank
 I=blank
+c="blank"
 
-while getopts ":P:A:H:I:G:Q:B:R:f:F:e:i:m:h" OPT
+while getopts ":P:A:H:I:G:Q:B:R:f:F:e:i:m:c:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -111,6 +114,7 @@ do
   e) e=$OPTARG;;
   i) i=$OPTARG;;
   m) m=$OPTARG;;
+  c) c=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -132,6 +136,18 @@ done
 if [[ -n "$A" && -z "$G" ]]; then
   usage
   exit 1
+fi
+
+#----------------------------------
+
+if [[ "$c" != "blank" ]]; then
+  if ! [[ "$c" =~ ^[1-9][0-9]*$ ]]; then
+    echo "--cores must be a positive integer, got '$c'" >&2
+    exit 1
+  fi
+  num_cores="$c"
+else
+  num_cores="blank"
 fi
 
 #----------------------------------
@@ -406,7 +422,6 @@ fi
 
 num_loops=`cat "$P" | wc -l`
 
-
 ###########################################################################
 ###########################################################################
 ###                                                                     ###
@@ -426,7 +441,7 @@ then
       $Q \
       $G \
       $num_loops \
-      $f $F $S $s $p $e $i $data_dir/$G/$A $m
+      $f $F $S $s $p $e $i $data_dir/$G/$A $m $num_cores
 fi
 
 ###########################################################################
@@ -451,5 +466,5 @@ then
       $Q \
       $G \
       $num_loops \
-      $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $i
+      $f $F $S $s $p $e $data_dir/$G/$A $data_dir/$G/$B $m $i $num_cores
 fi
