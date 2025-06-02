@@ -43,7 +43,7 @@ function help {
     echo "  [    --sample1_dir   ] : If not using the tinkerbox, specify the full path to the directory containing sample data"
     echo "  [    --sample2_dir   ] : If not using the tinkerbox, full path to the second sample directory"
     echo "  [ -Q|--norm          ] : Which normalization to use: none, cpm, aqua, or abc in lower case"
-    echo "  [ -R|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
+    echo "  [ -r|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
     echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, or sum. Default center"
     echo "  [ -F|--fix           ] : If FALSE, reports new coordinates using center or max arithmetic. Default TRUE"
     echo "  [    --expand        ] : Expands bedpe feet in both directions by supplied value in base pairs. Default 0"
@@ -71,7 +71,7 @@ for arg in "$@"; do
       "--genome")        set -- "$@" "-G" ;;
       "--norm")          set -- "$@" "-Q" ;;
       "--sample2")       set -- "$@" "-B" ;;
-      "--resolution")    set -- "$@" "-R" ;;
+      "--resolution")    set -- "$@" "-r" ;;
       "--formula")       set -- "$@" "-f" ;;
       "--fix")           set -- "$@" "-F" ;;
       "--expand")        set -- "$@" "-e" ;; 
@@ -85,7 +85,7 @@ done
 
 
 Q="blank"
-R=5000
+r=5000
 f=center
 F=TRUE
 S=FALSE
@@ -98,7 +98,7 @@ H=blank
 I=blank
 c="blank"
 
-while getopts ":P:A:H:I:G:Q:B:R:f:F:e:i:m:c:h" OPT
+while getopts ":P:A:H:I:G:Q:B:r:f:F:e:i:m:c:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -108,7 +108,7 @@ do
   G) G=$OPTARG;;
   Q) Q=$OPTARG;;
   B) B=$OPTARG;;
-  R) R=$OPTARG;;
+  r) r=$OPTARG;;
   f) f=$OPTARG;;
   F) F=$OPTARG;;
   e) e=$OPTARG;;
@@ -420,6 +420,18 @@ fi
 
 #----------------------------------
 
+case "$r" in
+    1000|5000|10000|25000|50000|100000|250000|500000|1000000|2500000)
+    # Value is accepted
+    ;;
+    *)
+    echo -e "\n--resolution '$r' is not accepted.\nAccepted resolutions are: 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000\n"
+    exit 1
+    ;;
+esac
+
+#----------------------------------
+
 num_loops=`cat "$P" | wc -l`
 
 ###########################################################################
@@ -435,7 +447,7 @@ then
     Rscript \
     $aqua_dir/query_bedpe.r \
       $P \
-      $R \
+      $r \
       $path_hic_A \
       $path_mgs_A \
       $Q \
@@ -458,7 +470,7 @@ then
     Rscript \
     $aqua_dir/query_bedpe.r \
       $P \
-      $R \
+      $r \
       $path_hic_A \
       $path_mgs_A \
       $path_hic_B \
