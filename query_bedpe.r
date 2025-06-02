@@ -972,8 +972,6 @@ zero_diag <- function( matrix, width ){
 #################################################################
 
 args        <- commandArgs( trailingOnly = TRUE )
-print(args)
-
 path_pairs  <- args[1]
 bin_size    <- as.numeric(args[2])
 norm        <- "NONE"
