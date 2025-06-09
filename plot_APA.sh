@@ -30,14 +30,15 @@ function help {
     echo "    -G|--genome                 : Genome build used for sample processing"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
     echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample"
-    echo " [    --sample1_dir          ]  : If not using the tinkerbox, specify the full path to the directory containing sample data"
-    echo " [    --sample2_dir          ]  : If not using the tinkerbox, full path to the second sample directory"
+    echo " [     --sample1_dir         ]  : If not using the tinkerbox, specify the full path to the directory containing sample data"
+    echo " [     --sample2_dir         ]  : If not using the tinkerbox, full path to the second sample directory"
     echo " [  -Q|--norm                ]  : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution          ]  : Bin size you want to use for the APA plots. Default 5000"
     echo " [     --max_cap             ]  : Upper limit of the plot range. Defaults to max bin value"
     echo " [     --min_cap             ]  : Lower limit of the plot range. Default 0"
     echo " [     --max_cap_delta       ]  : Upper limit of delta plot range. Defaults to max bin value"
     echo " [     --loop_norm           ]  : If TRUE, normalizes APA values by loop count in bedpe. Default FALSE"
+    echo " [  -s|--scores              ]  : If TRUE, plots peak bin bin value and ratios of peak:corner means. Default TRUE"
     echo " [  -h|--help                ]   Help message"
     exit;
 }
@@ -66,6 +67,7 @@ for arg in "$@"; do
       "--loop_norm")            set -- "$@" "-l" ;;
       "--sample1_dir")          set -- "$@" "-H" ;;
       "--sample2_dir")          set -- "$@" "-I" ;;
+      "--scores")               set -- "$@" "-s" ;;
       "--help")                 set -- "$@" "-h" ;;
        *)                       set -- "$@" "$arg"
   esac
@@ -78,8 +80,9 @@ e="no_cap"
 l=FALSE
 H=blank  
 I=blank
+s=TRUE
 
-while getopts ":P:A:G:O:B:Q:r:c:e:d:f:l:H:I:h" OPT
+while getopts ":P:A:G:O:B:Q:r:c:e:d:f:l:H:I:s:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -95,6 +98,7 @@ do
   e) e=$OPTARG;;
   H) H=$OPTARG;;
   I) I=$OPTARG;;
+  s) s=$OPTARG;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -109,6 +113,7 @@ do
     esac
 done
 
+
 #----------------------------------
 
 if [[ -z $P ]];
@@ -118,7 +123,7 @@ then
 fi
 
 if [[ ! -f "$P" ]]; then
-    echo "\n'$P' is not a valid file\n"
+    echo -e "\n'$P' is not a valid file\n"
     exit
 fi
 
@@ -172,31 +177,64 @@ if [[ ! -z "$B" || "$I" != "blank" ]]; then
 fi
 
 #----------------------------------
-
-col1=$(head -n 1  "$P" | cut -f 1 )
-col1="${col1:0:3}"
-
-col4=$(head -n 1  "$P" | cut -f 4 )
-col4="${col4:0:3}"
-
-
-if [[ $col1 != "$col4"  ]]; then
-echo "Please provide a 6-col bedpe file without headers"
-exit
-fi
+# Checks for $P
 
 first_line=$(head -n 1 "$P")
-chr1=$(echo "$first_line" | awk '{print $1}')
-chr2=$(echo "$first_line" | awk '{print $4}')
 
-if [ "$chr1" != "$chr2" ]; then
-  echo "APA statistics are not designed for interchromosomal regions, for more information see https://github.com/aidenlab/juicer/wiki/APA"
-  exit 1
+# Check for tab-separated bedpe with at least 6 columns
+tab_check=$(echo "$first_line" | awk -F'\t' '{print NF}')
+if [[ "$tab_check" -lt 6 ]]; then
+    echo ".bedpe file must have at least 6 TAB-delimited columns"
+    exit 1
 fi
 
+# Check for trailing whitespaces
 if [[ "$first_line" =~ [[:space:]]+$ ]]; then
-  echo "Trailing whitespace detected on the first line of the bedpe file. Please remove trailing spaces."
-  exit 1
+  sed -i '1s/[[:space:]]\+$//' "$P"
+fi
+
+# Check for a header by comparing the first three characters of the first and fourth columns
+col1=$(echo "$first_line" | cut -f1)
+col4=$(echo "$first_line" | cut -f4)
+if [[ "${col1:0:3}" != "${col4:0:3}" ]]; then
+    echo "Please provide a 6-col BEDPE file without headers."
+    exit 1
+fi
+
+# Check for intrachromosomal interactions.
+chr1=$(echo "$first_line" | awk '{print $1}')
+chr2=$(echo "$first_line" | awk '{print $4}')
+if [[ "$chr1" != "$chr2" ]]; then
+    echo "APA statistics are not designed for interchromosomal regions. See https://github.com/aidenlab/juicer/wiki/APA"
+    exit 1
+fi
+
+awk_output=$(awk '
+        BEGIN {FS="\t"; errors=0; reversed=0}
+        NF < 6 {
+            print "BEDPE error: Line " NR " has fewer than 6 columns"
+            errors++
+        }
+        $3 < $2 || $6 < $5 {
+            print "BEDPE error: Reversed feet in line " NR
+            reversed++
+        }
+        END {
+            if (errors > 0) {
+                print "BEDPE error: file should contain at least 6 columns in all rows."
+                exit 1
+            }
+            if (reversed > 0) {
+                print "Please ensure that column 3 > column 2 and column 6 > column 5 for all entries."
+                exit 1
+            }
+            exit 0
+        }' "$P")
+
+
+if [[ $? -ne 0 ]]; then
+    echo "$awk_output"
+    exit 1
 fi
 
 #----------------------------------
@@ -394,6 +432,24 @@ else
     Q="blank"
 fi
 
+#----------------------------------
+case "$r" in
+    1000|5000|10000|25000|50000|100000|250000|500000|1000000|2500000)
+    # Value is accepted
+    ;;
+    *)
+    echo -e "\n--resolution '$r' is not accepted.\nAccepted resolutions are: 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000\n"
+    exit 1
+    ;;
+esac
+
+#----------------------------------
+
+if [[ "$s" != "TRUE" && "$s" != "FALSE" ]]; then
+  echo "Variable \$s must be either TRUE or FALSE. Got: $s"
+  exit 1
+fi
+
 #---------------Binify-------------------
 
 # Create temporary files in /tmp
@@ -457,10 +513,16 @@ if [ "$two_sample" == "FALSE" ] ; then
     stat1=$path_mgs_A
     if [[ ! -f $stat1 ]]; then echo "cannot find $stat1"; exit 1; fi
 
+    if [ "$r" -le 5000 ]; then
+        q=3
+    else
+        q=6
+    fi
 
     # Call Juicer APA https://github.com/aidenlab/juicer/wiki/APA
     echo -e "\nBeginning APA...\n"
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
+
+    $juicer_tools apa -k NONE -n 0 -r "$r" -q "$q" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
 
     out_mat=$out_dir/$r/gw/APA.txt
     
@@ -495,7 +557,8 @@ if [ "$two_sample" == "FALSE" ] ; then
       "${l}" \
       "$num_loops" \
       "$out_dir" \
-      "${e}"
+      "${e}" \
+      "${s}"
 
     # Delete the specified directories and files after R script is called
     rm -r "$out_dir/$r"
@@ -525,6 +588,12 @@ if [ "$two_sample" == "TRUE" ] ; then
     out_dir=$O
     mkdir -p "$out_dir"
 
+    out_dir_A="$out_dir/$basename_A"
+    mkdir -p "$out_dir_A"
+
+    out_dir_B="$out_dir/$basename_B"
+    mkdir -p "$out_dir_B"
+
     #----------------------------------
 
     pair1=$path_hic_A
@@ -539,12 +608,18 @@ if [ "$two_sample" == "TRUE" ] ; then
 
     #----------------------------------
 
+    if [ "$r" -le 5000 ]; then
+        q=3
+    else
+        q=6
+    fi
+
     # https://github.com/aidenlab/juicer/wiki/APA
 
     echo -e "\nBeginning APA...\n"
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair1" "$tmp_binified" "$out_dir" &> /dev/null
-    out_mat_A="$out_dir/$r/gw/APA.txt"
+    $juicer_tools apa -k NONE -n 0 -r "$r" -q "$q" -w $win_size "$pair1" "$tmp_binified" "$out_dir_A" &> /dev/null
+    out_mat_A="$out_dir_A/$r/gw/APA.txt"
     if [ -f "$out_mat_A" ]; then
         mv "$out_mat_A" "$out_dir/APA_raw_${basename_A}.txt"
     else
@@ -552,8 +627,8 @@ if [ "$two_sample" == "TRUE" ] ; then
         exit 1
     fi
 
-    $juicer_tools apa --threads 1 -k NONE -n 0 -r "$r" -w $win_size "$pair2" "$tmp_binified" "$out_dir" &> /dev/null
-    out_mat_B="$out_dir/$r/gw/APA.txt"
+    $juicer_tools apa -k NONE -n 0 -r "$r" -q "$q" -w $win_size "$pair2" "$tmp_binified" "$out_dir_B" &> /dev/null
+    out_mat_B="$out_dir_B/$r/gw/APA.txt"
     if [ -f "$out_mat_B" ]; then
         mv "$out_mat_B" "$out_dir/APA_raw_${basename_B}.txt"
     else
@@ -562,7 +637,6 @@ if [ "$two_sample" == "TRUE" ] ; then
     fi
 
     #----------------------------------
-
 
     awk -F'[][,[]' '{ for(i=2; i<NF-1; i++) printf "%s\t", $i; printf "%s\n", $(NF-1) }' "$out_dir"/APA_raw_$basename_A.txt > "$out_dir"/APA_formatted_$basename_A.txt
 
@@ -594,10 +668,12 @@ if [ "$two_sample" == "TRUE" ] ; then
       "${l}" \
       "$num_loops" \
       "$out_dir" \
-      "${e}"
+      "${e}" \
+      "${s}"
 
     # Delete the specified directories and files after R script is called
-    rm -r "$out_dir/$r"
+    rm -r "$out_dir_A"
+    rm -r "$out_dir_B"
     rm "$out_dir"/APA_raw_$basename_A.txt
     rm "$out_dir"/APA_raw_$basename_B.txt
     rm "$out_dir"/APA_formatted_$basename_A.txt
