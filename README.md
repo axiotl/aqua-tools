@@ -209,11 +209,13 @@ You can find detailed concept tutorials and usage instructions for each tool in 
 
 Additionally, we've created a series of guided workflows we call "recipes". Each one walks through a specific analysis task using AQuA-tools.
 
+#### Recipes for Local Environments:  
 [Recipe 00: Assessing differences in interactions between peaks](https://docs.axiotl.com/recipes/recipe_00/)  
 Designed for the local installation of AQuA-tools. Highlights the use of AQuA normalization for exploring differences in interaction strength using `build_bedpe`, `intersect_bedpe`, `query_bedpe`, `union_bedpe` and `plot_APA`.
 
+#### Recipes for Docker/Tinker Environments:  
 [Recipe 01: Calling loops from a sample](https://docs.axiotl.com/recipes/recipe_01/)  
-For use in Docker or Tinker environments. Demonstrates how to call genome-wide loops from `.hic` files using `extract_bedpe` and visualize with `plot_contacts`.
+Demonstrates how to call genome-wide loops from `.hic` files using `extract_bedpe` and visualize with `plot_contacts`.
 
 [Recipe 02: Creating meaningful subsets](https://docs.axiotl.com/recipes/recipe_02/)  
 Shows how to filter, compare, and visualize loop subsets using the tools `intersect_bedpe` , `query_bedpe`, `union_bedpe`, and `plot_APA`.
