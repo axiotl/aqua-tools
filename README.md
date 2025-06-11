@@ -217,7 +217,7 @@ Designed for the local installation of AQuA-tools. Highlights the use of AQuA no
 [Recipe 01: Calling loops from a sample](https://docs.axiotl.com/recipes/recipe_01/)  
 Demonstrates how to call genome-wide loops from `.hic` files using `extract_bedpe` and visualize with `plot_contacts`.
 
-[Recipe 02: Creating meaningful subsets](https://docs.axiotl.com/recipes/recipe_02/)  
+[Recipe 02: Loop gains and losses between two samples](https://docs.axiotl.com/recipes/recipe_02/)  
 Shows how to filter, compare, and visualize loop subsets using the tools `intersect_bedpe` , `query_bedpe`, `union_bedpe`, and `plot_APA`.
 
 [Recipe 03: Making sense of loop networks](https://docs.axiotl.com/recipes/recipe_03/)  
