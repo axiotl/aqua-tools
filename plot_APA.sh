@@ -417,7 +417,7 @@ if [[ -z $O ]]; then
         # For a one-sample test
         O="${basename}_APA_${random_num}"
     fi
-    echo -e "\nNo output directory name provided. Generating output directory...\n"
+    echo -e "\nNo output directory name provided. Generating output directory..."
 fi
 
 #----------------------------------
