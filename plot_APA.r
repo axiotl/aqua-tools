@@ -397,6 +397,7 @@ if(length(Args) == 18) {
   cat(sprintf("sample A        <- %s\n", sampleA        ))
   cat(sprintf("sample B        <- %s\n", sampleB        ))
   cat(sprintf("out_file        <- %s\n", out_file       ))
+  cat(sprintf("bin_size        <- %s\n", res            )) 
 
 
   matrix_raw_A <- read.table(matrix_file_A, header=FALSE, sep="\t")
