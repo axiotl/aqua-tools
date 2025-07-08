@@ -193,10 +193,9 @@ if [[ "$first_line" =~ [[:space:]]+$ ]]; then
   sed -i '1s/[[:space:]]\+$//' "$P"
 fi
 
-# Check for a header by comparing the first three characters of the first and fourth columns
-col1=$(echo "$first_line" | cut -f1)
-col4=$(echo "$first_line" | cut -f4)
-if [[ "${col1:0:3}" != "${col4:0:3}" ]]; then
+# Check for a header with column 2 as numeric
+col2=$(echo "$first_line" | cut -f2)
+if ! [[ "$col2" =~ ^[0-9]+$ ]]; then
     echo "Please provide a 6-col BEDPE file without headers."
     exit 1
 fi
