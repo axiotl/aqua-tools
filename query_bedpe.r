@@ -998,7 +998,7 @@ if( length(args) == 17 ){
   flag_meta_string   <-  args[16]
   num_cores          <-  args[17]
 
-  available_cores <- detectCores() - 1
+  available_cores <- max(detectCores() - 1, 1)
   if (num_cores == "blank") {
     # auto-detect
     num_cores <- available_cores
@@ -1060,7 +1060,7 @@ if( length(args) == 20 ){
   flag_inherent     <-  args[19]
   num_cores         <-  args[20]
 
-  available_cores <- detectCores() - 1
+  available_cores <- max(detectCores() - 1, 1)
   if (num_cores == "blank") {
     # auto-detect
     num_cores <- available_cores
