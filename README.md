@@ -40,11 +40,11 @@ The free tier of Tinker is capped at 40 total hours of machine use time, followi
 - **Unlimited access**: No time cap for Tinker use time
 - **Pre-built notebooks**: Ready to use notebooks shoehorned to 3D genomic research questions
 
-To get started with Tinker, visit [tinker](https://tinker.axiotl.com/public)
+To get started with Tinker, visit [Tinker](https://tinker.axiotl.com/public)
 
 
 ### Docker
-To use AQuA tools locally, we highly recommend using Docker for an easy and cohesive experience.
+After [Tinker](https://tinker.axiotl.com/public), the next best way to use AQuA tools is via Docker.
 
 **Key Features:**
 - Isolated environment with all dependencies
