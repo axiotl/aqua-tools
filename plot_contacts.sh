@@ -16,14 +16,6 @@ fi
 
 juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar'
 
-# Check if the current directory is the shared-files folder
-current_directory=$(pwd)
-shared_files_path="/home/ubuntu/shared-files"
-if [ "$current_directory" == "$shared_files_path" ]; then
-  echo -e "\nError: You cannot generate plots from the ~/shared-files folder. Please navigate to a different directory and generate the plot there.\n"
-  exit 1
-fi
-
 function usage {
     echo -e "usage : plot_contacts.sh -A NAME_OF_FIRST_SAMPLE -R RANGE -G GENOME_BUILD [-h]"
     echo -e "Use option -h|--help for more information"
@@ -429,21 +421,23 @@ elif [[ $R =~ $inter_format ]]; then
         echo -e "\nInherent normalization is not compatible with interchromosomal ranges.\n"
         exit 1
     fi
-    
+
     # Split the input into two parts for interchromosomal range
     IFS='-' read -ra ADDR <<< "$R"
     chr1=${ADDR[0]}
     chr2=${ADDR[1]}
 
     # Extract chromosome numbers
-    num1=$(extract_chr_number "$chr1")
-    num2=$(extract_chr_number "$chr2")
+    num_chr1=$(extract_chr_number "$chr1")
+    num_chr2=$(extract_chr_number "$chr2")
 
     # Compare and rearrange if necessary (for strawr later)
-    if [[ $num1 -gt $num2 ]]; then
+    if [[ $num_chr1 -gt $num_chr2 ]]; then
         R="$chr2-$chr1"
-        echo "Range rearranged to: $R"
     fi
+
+    orig_chr1="chr${num_chr1}"
+    orig_chr2="chr${num_chr2}"
 
 # Check if input is a likely attempt at interchromosomal format
 elif [[ $R =~ $likely_attempt ]]; then
@@ -644,39 +638,34 @@ fi
   sample_dir=$data_dir/$G/$A
   out_dir=`pwd`
 
-  echo "switch to R"
-  Rscript $aqua_dir/plot_contacts.r \
-    $analysis_type \
-    $T \
-    $pair1 \
-    $stat1 \
-    $norm_method \
-    $unit \
-    $bin_size \
-    $prefix \
-    "${range_text}_${bin_size}" \
-    $out_dir \
-    $chr $start $end \
-    $G \
-    $p \
-    $o \
-    $d \
-    "$x" \
-    "$c" \
-    $m \
-    $Q \
-    $q \
-    $O \
-    $P \
-    $y \
-    $i \
-    $sample_dir \
-    $w \
-    $K \
-    $L \
-    $M \
-    $N \
-    $D
+  # Build argument list
+  args=(
+  "$analysis_type"
+  "$T"
+  "$pair1" "$stat1"
+  "$norm_method" "$unit" "$bin_size" "$prefix"
+  "${range_text}_${bin_size}"
+  "$out_dir"
+  "$chr" "$start" "$end"
+  "$G" "$p" "$o" "$d" "$x" "$c"
+  "$m" "$Q" "$q" "$O" "$P" "$y" "$i"
+  "$sample_dir"
+  "$w" "$K" "$L" "$M" "$N" "$D"
+  )
+
+  # Keep user supplied inter chr order
+  if [[ $T == "TRUE" ]]; then
+    args+=("$orig_chr1" "$orig_chr2")
+  fi
+
+  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}"
+  exit_status=$?
+
+  if [ "$D" == FALSE ]; then
+    if [ $exit_status -eq 0 ] && [ -f "$O" ]; then
+        echo -e "\nDone! Created $O \n"
+    fi
+  fi
 
 fi
 
@@ -774,40 +763,34 @@ then
   sample_dirA=$data_dir/$G/$A
   sample_dirB=$data_dir/$G/$B
 
-  echo "switch to R"
-  Rscript $aqua_dir/plot_contacts.r \
-    $analysis_type \
-    $T \
-    $pair1 \
-    $pair2 \
-    $stat1 \
-    $stat2 \
-    $norm_method \
-    $unit \
-    $bin_size \
-    $prefix \
-    "${range_text}_${bin_size}" \
-    $out_dir \
-    $chr $start $end \
-    $G \
-    $p \
-    $t \
-    $d \
-    "$x" \
-    "$c" \
-    $m \
-    $Q \
-    $q \
-    $O \
-    $P \
-    $y \
-    $w \
-    $sample_dirA $sample_dirB \
-    $D \
-    $K \
-    $L \
-    $M \
-    $N \
-    $i
+  # Build argument list
+  args=(
+    "$analysis_type"
+    "$T"
+    "$pair1" "$pair2" "$stat1" "$stat2"
+    "$norm_method" "$unit" "$bin_size" "$prefix"
+    "${range_text}_${bin_size}"
+    "$out_dir"
+    "$chr" "$start" "$end"
+    "$G" "$p" "$t" "$d" "$x" "$c"
+    "$m" "$Q" "$q" "$O" "$P" "$y" "$w"
+    "$sample_dirA" "$sample_dirB"
+    "$D" "$K" "$L" "$M" "$N" "$i"
+    )
+
+  # Keep user supplied inter chr order
+  if [[ $T == "TRUE" ]]; then
+    args+=("$orig_chr1" "$orig_chr2")
+  fi
+
+  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}"
+  exit_status=$?
+
+  # Successful message
+  if [ "$D" == FALSE ]; then
+    if [ $exit_status -eq 0 ] && [ -f "$O" ]; then
+        echo -e "\nDone! Created $O \n"
+    fi
+  fi
 
 fi
