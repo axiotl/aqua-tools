@@ -14,28 +14,12 @@ flag_inter    <- Args[2]
 #################################################################
 ##                          Functions                          ##
 #################################################################
-
-calculate_w <- function(
-    plot_width, 
-    plot_height,
-    A){
-  
-  aspect_ratio <- plot_height / plot_width
-  
-  diagonal_bins <- ceiling(sqrt(nrow(A)^2 + nrow(A)^2))
-  w <- (aspect_ratio * plot_width / diagonal_bins)
-  
-  return(w)
-}
-
-
 calculate_cap <- function(
     denMat, 
     max_cap, 
     quant_cut, 
     flag_inter = "FALSE") {
   
-  # Function to calculate skewness
   calculate_skewness <- function(values) {
     n <- length(values)
     if (n < 2) {
@@ -51,7 +35,7 @@ calculate_cap <- function(
   
   if (all(denMat == 0)) {
     cat(sprintf("\nNo contact values found for this interval at resolution %d\n", bin_size))
-    quit()
+    quit(save = "no", status = 1)
   }
   
   # Check for 'max_cap' and 'quant_cut' conditions
@@ -114,6 +98,19 @@ calculate_cap <- function(
 ##                          Intra-Chr                          ##
 #################################################################
 
+calculate_w <- function(
+    plot_width, 
+    plot_height,
+    A){
+  
+  aspect_ratio <- plot_height / plot_width
+  
+  diagonal_bins <- ceiling(sqrt(nrow(A)^2 + nrow(A)^2))
+  w <- (aspect_ratio * plot_width / diagonal_bins)
+  
+  return(w)
+}
+
 get_diagonals <- function( 
     matrix, 
     num_off_diagonals ){
@@ -134,22 +131,27 @@ get_diagonals <- function(
   return( off_diagonal_matrix )
 }
 
-zero_diag <- function( 
-    matrix, 
-    width ){
-  
-  if( nrow(matrix) == ncol(matrix) ){
-    for ( j in 0:width ){
-      for ( i in 1:(nrow(matrix)-j) ){
-        matrix[i+j,i  ] <- 0
-        matrix[i  ,i+j] <- 0
-      }
-    }
-    return( matrix )
-  } else {
-    cat("zero_diag: matrix isn't square\n")
+zero_diag <- function(matrix, width) {
+  if (nrow(matrix) != ncol(matrix)) {
+    stop("zero_diag: matrix must be square")
   }
+  if (nrow(matrix) <= width) {
+    stop(sprintf(
+      "zero_diag: matrix is too small (%d x %d) for requested diagonal width (%d). Try increase the range.",
+      nrow(matrix), ncol(matrix), width
+    ))
+  }
+
+  n <- nrow(matrix)
+  for (j in 0:width) {
+    for (i in 1:(n - j)) {
+      matrix[i + j, i] <- 0
+      matrix[i, i + j] <- 0
+    }
+  }
+  return(matrix)
 }
+
 
 draw_scale <- function( ){
   
@@ -229,6 +231,7 @@ draw_scale_inh <- function(
 }
 
 
+# Determine if a gene overlaps any BEDPE region
 is_gene_in_bedpe <- function(gene_start, gene_end, pairs) {
   if (!is.data.frame(pairs) || nrow(pairs) == 0) {
     return(FALSE)
@@ -440,9 +443,6 @@ draw_contacts <- function(A, C, left_side, bedpe) {
   }
 }
 
-
-
-
 draw_title <- function(
     interval_chr, 
     interval_start, 
@@ -481,6 +481,16 @@ draw_title <- function(
 ##                          Inter-Chr                          ##
 #################################################################
 
+calculate_w_inter <- function(plot_width, plot_height, A) {
+  n_rows <- nrow(A)
+  n_cols <- ncol(A)
+  
+  # Choose the smaller bin size to ensure cells fit
+  w <- min(plot_width / n_cols, plot_height / n_rows)
+  
+  return(w)
+}
+
 calculate_plot_dimensions <- function(interval_start1, interval_end1, 
                                       interval_start2, interval_end2, 
                                       bin_size, 
@@ -506,6 +516,46 @@ calculate_plot_dimensions <- function(interval_start1, interval_end1,
   return(list(width = plot_width, height = plot_height))
 }
 
+is_gene_in_bedpe_inter <- function(gene_chr, gene_start, gene_end, axis, pairs, flip_axes, gene_name = NULL) {
+  if (!is.data.frame(pairs) || nrow(pairs) == 0) {
+    return(FALSE)
+  }
+
+  for (p in seq_len(nrow(pairs))) {
+    if (!flip_axes) {
+      if (axis == "x" && gene_chr == new_interval_chr1) {
+        region_start <- pairs$start1[p]
+        region_end   <- pairs$end1[p]
+        bed_chr <- pairs$chr1[p]
+      } else if (axis == "y" && gene_chr == new_interval_chr2) {
+        region_start <- pairs$start2[p]
+        region_end   <- pairs$end2[p]
+        bed_chr <- pairs$chr2[p]
+      } else {
+        next
+      }
+    } else {
+      # In flipped plots, anchors were swapped, so access reversed
+      if (axis == "x" && gene_chr == new_interval_chr1) {
+        region_start <- pairs$start2[p]
+        region_end   <- pairs$end2[p]
+        bed_chr <- pairs$chr2[p]
+      } else if (axis == "y" && gene_chr == new_interval_chr2) {
+        region_start <- pairs$start1[p]
+        region_end   <- pairs$end1[p]
+        bed_chr <- pairs$chr1[p]
+      } else {
+        next
+      }
+    }
+
+    if (gene_start < region_end && gene_end > region_start) {
+      return(TRUE)
+    }
+  }
+  return(FALSE)
+}
+
 
 draw_feature_inter <- function(
     chr, up, do,
@@ -515,63 +565,56 @@ draw_feature_inter <- function(
     w, top, axis,
     interval_start, interval_len,
     plot_width, plot_height,
-    depth) {
-  
+    depth,
+    gene_cex = 0.2,
+    coord_cex = 0.1) {
+
   # Clip the start and end positions to the interval boundaries
   clipped_start <- max(up, interval_start)
   clipped_end <- min(do, interval_start + interval_len)
   
   genomic_region_label <- sprintf("%s:%d-%d", chr, clipped_start, clipped_end)
 
-  # +bin_size fixes annotation drift 
+  # Convert genomic positions to plot coordinates using bin size and w
   calculate_position <- function(pos) {
-    relative_position <- (pos - interval_start) / (interval_len + bin_size)
-    return(relative_position * ifelse(axis == "x", plot_width, plot_height))
+    return((pos - interval_start) / bin_size * w)
   }
 
   str <- calculate_position(clipped_start)
   end <- calculate_position(clipped_end)
-  
-  x_adjustment <- 2 * (plot_height / 100)
-  y_adjustment <- 4 * (plot_height / 100)
+
+  larger_dim <- max(plot_height, plot_width)
+  x_adjustment <- 2 * (larger_dim / 100)
+  y_adjustment <- 4 * (larger_dim / 100)
   
   if (axis == "x") {
-    y_position <- top - depth  # Adjust y-position based on depth for x-axis
+    y_position <- top - depth
     lines(c(str, end), c(y_position, y_position), col = col, lwd = 0.5)
+    
     if (flag_text && gene_name != "") {
       label <- sprintf("%s (%s)", gene_name, genomic_region_label)
-      label_x <- end + x_adjustment
+      label_x <- (end + x_adjustment) - 0.5
       label_y <- y_position + y_adjustment
-      text(label_x, label_y, label, col = col, cex = 0.2 * (plot_height / 100), srt = 45, pos = 3)
-      
-      # Add dotted line
-      segments(
-        end, y_position,
-        end, label_y,
-        col = "#B2B2B2", lwd = 0.5, lty = "dotted"
-      )
+
+      text(label_x, label_y, label, col = col, cex = gene_cex, srt = 45, pos = 3)
+      segments(end, y_position, end, label_y, col = "#B2B2B2", lwd = 0.4, lty = "dotted")
     }
-  } else {  # Axis == "y"
-    x_position <- depth  # Use depth for x-position on y-axis
-    y_start <- top - str
+
+  } else if (axis == "y") {
+    x_position <- depth
+    y_start <- (top - str)
     y_end <- top - end
     lines(c(x_position, x_position), c(y_start, y_end), col = col, lwd = 0.5)
+
     if (flag_text && gene_name != "") {
       label <- sprintf("%s (%s)", gene_name, genomic_region_label)
-      
-      # Adjusts position of text label
-      text_offset <- x_adjustment * 0.5  # Reduced offset for text
+      text_offset <- x_adjustment * 0.25
       label_x <- x_position - text_offset 
       label_y <- y_end
-      text(label_x, label_y, label, col = col, cex = 0.2 * (plot_height / 100), pos = 2, adj = 1)
-      
-      # Add dotted line
+
+      text(label_x, label_y, label, col = col, cex = gene_cex, pos = 2, adj = 1)
       dotted_line_end <- x_position - x_adjustment
-      segments(
-        x_position, y_end,
-        dotted_line_end, y_end,
-        col = "#B2B2B2", lwd = 0.5, lty = "dotted"
-      )
+      segments(x_position, y_end, dotted_line_end, y_end, col = "#B2B2B2", lwd = 0.4, lty = "dotted")
     }
   }
 }
@@ -602,112 +645,127 @@ draw_bed_inter <- function(
     stop()
   }
   
-  if (nrow(bed) > 0) {
-    # Check if there's a fourth column for text
-    if (ncol(bed) == 3 && flag_text) {
-      flag_text <- FALSE
-    }
-    
-    # Separate beds for each axis
-    bed_x <- bed[bed$chr == interval_chr1, ]
-    bed_y <- bed[bed$chr == interval_chr2, ]
-    
-    process_axis <- function(bed_data, axis, interval_start, interval_len) {
+  if (nrow(bed) == 0) {
+    cat("draw_bed_inter error: empty bed file\n")
+    return()
+  }
+
+  # Check if there's a fourth column for text
+  if (ncol(bed) == 3 && flag_text) {
+    flag_text <- FALSE
+  }
+  
+  # Determine which axis to process
+  if (axis == "x") {
+    bed_data <- bed[bed$chr == new_interval_chr1, ]
+    axis_start <- interval_start1
+    axis_len <- interval_len1
+  } else if (axis == "y") {
+    bed_data <- bed[bed$chr == new_interval_chr2, ]
+    axis_start <- interval_start2
+    axis_len <- interval_len2
+  } else {
+    stop("Invalid axis value: must be 'x' or 'y'")
+  }
+
+  process_axis <- function(bed_data, axis, interval_start, interval_len) {
+    bed_data <- bed_data[bed_data$start < interval_start + interval_len & bed_data$end > interval_start, ]
+    bed_data$bin <- floor(bed_data$start / bin_size)
+    bin_counts <- table(bed_data$bin)
+
+    for (bin in names(bin_counts)) {
+      bin_genes <- bed_data[bed_data$bin == as.numeric(bin), ]
       
-      # Filter genes within the interval
-      bed_data <- bed_data[bed_data$start < interval_start + interval_len & bed_data$end > interval_start, ]
-      
-      # Assign bins
-      bed_data$bin <- floor(bed_data$start / bin_size)
-      
-      # Count genes per bin
-      bin_counts <- table(bed_data$bin)
-      
-      # Process each bin
-      for (bin in names(bin_counts)) {
-        bin_genes <- bed_data[bed_data$bin == as.numeric(bin), ]
-        
-        if (nrow(bin_genes) == 1) {
-          b <- bin_genes[1, ]
-          gene_name <- if(flag_text && ncol(bed) >= 4) b$name else ""
-          draw_feature_inter(b$chr, b$start, b$end, gene_name, color, flag_text, w, top, axis, interval_start, interval_len, plot_width, plot_height, depth)
-        } else {
-          # For bins with 2 or more genes, apply offsetting
-          offset <- bin_size / 2
-          for (i in 1:nrow(bin_genes)) {
-            b <- bin_genes[i, ]
-            gene_name <- if(flag_text && ncol(bed) >= 4) b$name else ""
-            if (nrow(bin_genes) == 2) {
-              # For exactly 2 genes, offset in opposite directions
-              offset_direction <- if(i == 1) -1 else 1
-            } else {
-              # For 3 or more genes, alternate offsetting
-              offset_direction <- if(i %% 2 == 1) -1 else 1
-            }
-            offset_start <- b$start + offset_direction * offset
-            offset_end <- b$end + offset_direction * offset
-            draw_feature_inter(b$chr, offset_start, offset_end, gene_name, color, flag_text, w, top, axis, interval_start, interval_len, plot_width, plot_height, depth)
-          }
+      for (i in seq_len(nrow(bin_genes))) {
+        b <- bin_genes[i, ]
+
+        # Non-gene annotations
+        if (!flag_text) {
+          draw_feature_inter(
+            b$chr, b$start, b$end, "",
+            col = color, flag_text = FALSE,
+            w = w, top = top, axis = axis,
+            interval_start = interval_start, interval_len = interval_len,
+            plot_width = plot_width, plot_height = plot_height,
+            depth = depth
+          )
+          next
         }
+
+        # Gene annotations: evaluate BEDPE overlap
+        gene_name <- if (ncol(bed) >= 4) b$name else ""
+
+        if (exists("pairs") && nrow(pairs) > 0 &&
+            is_gene_in_bedpe_inter(b$chr, b$start, b$end, axis, pairs, flip_axes, gene_name)) {
+          gene_cex  <- 0.2
+          coord_cex <- 0.08
+          colour <- "#ef0000"
+        } else {
+          gene_cex  <- 0.1
+          coord_cex <- 0.05
+          colour <- "#aaaaaa"
+        }
+
+        draw_feature_inter(
+          b$chr, b$start, b$end, gene_name,
+          col = colour, flag_text = TRUE,
+          w = w, top = top, axis = axis,
+          interval_start = interval_start, interval_len = interval_len,
+          plot_width = plot_width, plot_height = plot_height,
+          depth = depth,
+          gene_cex = gene_cex, coord_cex = coord_cex
+        )
       }
     }
-    
-    # Process X-axis
-    process_axis(bed_x, "x", interval_start1, interval_len1)
-    
-    # Process Y-axis
-    process_axis(bed_y, "y", interval_start2, interval_len2)
-    
-  } else {
-    cat("draw_bed_inter error: empty bed file\n")
   }
+
+  process_axis(bed_data, axis, axis_start, axis_len)
 }
 
 
-draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height, top) {
+
+draw_contacts_inter <- function(A, C, left_side, bedpe, top, w) {
   
   n_rows <- nrow(A)
   n_cols <- ncol(A)
-  cell_width  <- plot_width / n_cols
-  cell_height <- plot_height / n_rows
   
   # Draw contact matrix
   for (i in 1:n_rows) {
     for (j in 1:n_cols) {
       color <- rownames(C[order(abs(C[,"breaks"] - A[i, j]), decreasing = FALSE), ])[1]
       rect(
-        left_side + (j - 1) * cell_width, 
-        top - (i - 1) * cell_height,
-        left_side + j * cell_width, 
-        top - i * cell_height,
+        left_side + (j - 1) * w, 
+        top - (i - 1) * w,
+        left_side + j * w, 
+        top - i * w,
         col = color, 
         border = NA
       )
     }
   }
   
-  # Annotate the x-axis (columns) with labels aligned at the start (left edge) of the bin
-  annotation_interval <- ifelse(bin_size == 1000, 20, ifelse(bin_size %in% c(5000, 10000, 25000, 50000), 10, ifelse(bin_size >= 100000, 2, 10)))
+  # Annotate the x-axis with labels aligned at the start (left edge) of the bin
+  annotation_interval <- ifelse(bin_size == 1000, 20, ifelse(bin_size %in% c(5000, 10000, 25000, 50000), 10, ifelse(bin_size >= 100000, 5, 10)))
   
-  bottom_y <- top - n_rows * cell_height
+  bottom_y <- top - n_rows * w
   for (j in seq(1, n_cols, by = annotation_interval)) {
     bin_label <- colnames(A)[j]
     # Place the label at the left edge of the cell
-    label_x <- left_side + (j - 1) * cell_width
+    label_x <- left_side + (j - 1) * w
     # Position the label just below the contact matrix
-    label_y <- bottom_y - 0.5 * cell_height
+    label_y <- bottom_y - 0.5 * w
     text(label_x, label_y, labels = bin_label, cex = 0.05, col = "#8B8B8B", adj = 0)
     segments(x0 = label_x, y0 = bottom_y, x1 = label_x, y1 = label_y + 0.25,
              col = "#B2B2B2", lty = "dotted", lwd = 0.2)
   }
   
-  # Annotate the y-axis (rows) with labels aligned at the top edge of the bin
+  # Annotate the y-axis with labels aligned at the top edge of the bin
   for (i in seq(1, n_rows, by = annotation_interval)) {
     bin_label <- rownames(A)[i]
     # Place the label at the top edge of the row
-    label_y <- top - (i - 1) * cell_height
+    label_y <- top - (i - 1) * w
     # Position the label just to the left of the contact matrix
-    label_x <- left_side - 0.5 * cell_width
+    label_x <- left_side - 0.5 * w
     text(label_x, label_y, labels = bin_label, cex = 0.05, col = "#8B8B8B", adj = 1)
     segments(x0 = left_side, y0 = label_y, x1 = label_x + 0.25, y1 = label_y,
              col = "#B2B2B2", lty = "dotted", lwd = 0.2)
@@ -716,12 +774,11 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height,
   # Draw BEDPE highlights
   if (bedpe != "FALSE") {
     for (p in seq_len(nrow(pairs))) {
-      x1 <- left_side + (pairs$i[p] - 1) * cell_width
-      y1 <- top - (pairs$j[p] - 1) * cell_height
-      x2 <- left_side + (pairs$i_end[p]) * cell_width
-      y2 <- top - (pairs$j_end[p]) * cell_height
+      x1 <- left_side + (pairs$i[p] - 1) * w
+      y1 <- top - (pairs$j[p] - 1) * w
+      x2 <- left_side + (pairs$i_end[p]) * w
+      y2 <- top - (pairs$j_end[p]) * w
       
-      # Draw bedpe highlight
       rect(
         x1, y1, x2, y2,
         border = bedpe_color, 
@@ -731,8 +788,6 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, plot_width, plot_height,
     }
   }
 }
-
-
 
 
 draw_title_inter <- function(
@@ -829,7 +884,7 @@ if(flag_inter == "FALSE"){
     
     if( any( grepl( "chr", interval_chr, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
+      quit(save = "no", status = 1)
     }
     
     if (flag_matrix == "FALSE") {
@@ -879,7 +934,7 @@ if(flag_inter == "FALSE"){
             }
             
             if( pairs[i,"chr1"] != pairs[i,"chr2"] ){
-              cat("Please provide intra-chromosomal bedpes\n") ; quit(save="no")
+              cat("Please provide intra-chromosomal bedpes\n") ; quit(save = "no", status = 1)
             }
           }
           
@@ -987,7 +1042,7 @@ if(flag_inter == "FALSE"){
     
     if( nrow(sparMat1) == 0 ){
       cat("\n No contact values found for this interval\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     
@@ -1020,7 +1075,7 @@ if(flag_inter == "FALSE"){
         off_diagonal_max <- max( zero_diag( denMat1 , 4 ) )
         denMat1[denMat1 > off_diagonal_max] <- off_diagonal_max
         
-      } else{
+      } else {
         
         denMat1 <- denMat1
       }
@@ -1031,7 +1086,7 @@ if(flag_inter == "FALSE"){
         out_file <- paste0(sample_name, "_matrix.txt")
         write.table(denMat1, file = out_file, row.names = FALSE, col.names = FALSE)
         cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
-        quit(save = "no")
+        quit(save = "no", status = 1)
       }
       
       # Get cap value
@@ -1039,7 +1094,7 @@ if(flag_inter == "FALSE"){
       cap <- round(cap, 3)
       
       # Print the cap
-      cat(sprintf("   cap: %s\n", cap ))
+      cat(sprintf("        cap: %s\n", cap ))
       
       # Cap the values in the original matrix
       denMat1[denMat1 > cap] <- cap
@@ -1220,185 +1275,185 @@ if(flag_inter == "FALSE"){
     }
     
     if(isTRUE(inherent)){
-      
+        
       cat(sprintf("   inh_col_floor: %s\n", inh_col_floor ))
       cat(sprintf("   inh_col_off:   %s\n", inh_col_off   ))
       cat(sprintf("   inh_col_on:    %s\n", inh_col_on    ))
       cat(sprintf("   inh_col_ceil:  %s\n", inh_col_ceil  ))
-      
+        
       denMat1 <- matrix(
         data = 0,
         nrow = length(seq(interval_start, interval_end, bin_size)),
         ncol = length(seq(interval_start, interval_end, bin_size))
       )
-      
+        
       rownames(denMat1) <- seq(interval_start, interval_end, bin_size)
       colnames(denMat1) <- seq(interval_start, interval_end, bin_size)
-      
+        
       # Populate denMat1
       for (i in 1:nrow(sparMat1)) {
         x_index <- as.character(sparMat1[i, "x"])
         y_index <- as.character(sparMat1[i, "y"])
-        
+          
         if (x_index %in% rownames(denMat1) && y_index %in% colnames(denMat1)) {
           denMat1[x_index, y_index] <- sparMat1[i, "counts"]
         }
       }
-      
+        
       power_law_path <- list.files(
         sample_dir,
         pattern = paste0("inherentStats",".txt"),
         full.names = T)
-      
+        
       if(length(power_law_path) == 0){
         cat("Power laws unavailable for this sample! \n")
         q( save = "no" )
       }
-      
+        
       power_laws <- read.table(
         power_law_path,
         as.is = T,
         skip = 1 )
-      
+        
       colnames(power_laws) <- c("off","on","res") ; power_laws <- power_laws[! power_laws$off %in% "off",]
-      
+        
       power_laws$off  <- as.numeric(power_laws$off)
       power_laws$on   <- as.numeric(power_laws$on)
       power_laws$res  <- as.numeric(power_laws$res)
       power_laws      <- power_laws[power_laws$res == bin_size,]
-      
+        
       if(nrow(power_laws) == 0){
         cat("Power laws unavailable at this resolution! \n")
         q( save = "no" )
       }
-      
+        
       if(nrow(power_laws) < ncol(denMat1)){
-        
+          
         diff <- ncol(denMat1) - nrow(power_laws)
-        
+          
         power_laws <- rbind(
           power_laws,
           do.call(
             "rbind",
             replicate(diff, power_laws[nrow(power_laws),], simplify = FALSE)) )
       }
-      
+        
       background <- power_laws[,"off"]
       foreground <- power_laws[,"on" ]
-      
+        
       # Remove background
       tad_matrix_bg_removed <- denMat1
-      
+        
       for ( j in 0:(ncol(denMat1) - 1) ){
         for ( i in 1:(nrow(denMat1)-j) ){
           tad_matrix_bg_removed[i  ,i+j  ] <-
             denMat1[i,i+j  ] - background[j+1]
         }
       }
-      
+        
       # Standardize
       tad_matrix_sd <- tad_matrix_bg_removed
-      
+        
       for ( j in 0:(ncol(tad_matrix_bg_removed) - 1) ){
         for ( i in 1:(nrow(tad_matrix_bg_removed)-j) ){
           tad_matrix_sd[i  ,i+j  ] <-
             tad_matrix_bg_removed[i ,i+j  ] / (foreground[j+1] - background[j+1])
         }
       }
-      
+        
       A <- tad_matrix_sd
       for(i in 2:nrow(A)){
         for(j in 1:(i-1)){
           A[i,j] <- 0
         }
       }
-      
+        
       if(flag_matrix){ 
         sample_name <- basename(sample_dir)
         out_file <- paste0(sample_name, "_matrix.txt")
         write.table(A, file = out_file, row.names = FALSE, col.names = FALSE)
         cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
-        quit(save = "no")
+        quit(save = "no", status = 1)
       }
-      
+        
       if( max_cap != "none" ){
         cat("\nParameter --max_cap is not applicable when inherent = TRUE\nContinuing without --max_cap...\n\n")
       }
       if( quant_cut != 1 ){
         cat("\nParameter --quant_cut is not applicable when inherent = TRUE\nContinuing without --quant_cut...\n\n")
       }
-      
+        
       ## Plot:
-      
+        
       pdf(
         output_name,
         width = 8.5, height = 11 )
-      
+        
       par(family = "Helvetica")
       par(omi = rep(0.5,4))
       par(mai = rep(0.5,4))
       par(bg  = "#eeeeee")
-      
+        
       plot( NULL,
             xlim = c(0,100), ylim = c(0,140),
             xlab = NA,       ylab = NA,
             xaxt = "n",      yaxt = "n",
             bty = "n",       asp = 1 )
-      
-      
+        
+        
       if(flag_w == "blank"){
         w  <- calculate_w(100, 140, A)
       }
-      
+        
       if (flag_w != "blank"){
         w <- as.numeric(flag_w)
         max_w  <- calculate_w(100, 140, A)
-        
+          
         if (w > max_w){
           cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
           w <- max_w
         }
       }
-      
+        
       if (w > 2 && bin_size >= 5000){cat(underplot_message)}
       if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
       if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
-      
+        
       cat(sprintf("plotting bin width: %s\n", round(w,3)))
-      
+        
       top        <- 138
-      
+        
       colors_n       <- 10
       colors_0_1     <- colorRampPalette(c(inh_col_off , inh_col_on  ))( colors_n )
       colors_1_2     <- colorRampPalette(c(inh_col_on  , inh_col_ceil))( colors_n )
       colors         <- c( inh_col_floor, colors_0_1, colors_1_2 )
-      
+        
       breaks <- c(
         (1:colors_n)/colors_n,
         (1:colors_n)/colors_n+1 )
       breaks <- c( 0, breaks )
-      
-      
+        
+        
       C <- matrix( ncol = 2, nrow = length(breaks), data = 0)
       rownames( C ) <- colors
       colnames( C ) <- c("rank","breaks")
       C[,1] <- 1:nrow(C)
       C[,2] <- breaks
-      
-      
+        
+        
       draw_title(interval_chr, interval_start, interval_end)
       top <- top - 10
       draw_scale_inh(steps = 1, breaks)
       top <- top - 20
-      
+        
       draw_contacts( A , C , left_side = 0, bedpe )
-      
+        
       no_def_ann <- FALSE
       no_cus_ann <- FALSE
 
       base_depth <- 6.00
       step_depth <- 0.25
-      
+        
       if(isFALSE(flag_profiles)){
 
         legend_labels <- c()
@@ -1413,7 +1468,7 @@ if(flag_inter == "FALSE"){
         } else {
           0
         }
-          
+            
         # compute dynamic TSS depth
         if (n_custom > 0) {
           tss_depth <- base_depth + step_depth * n_custom + step_depth
@@ -1422,7 +1477,7 @@ if(flag_inter == "FALSE"){
           # when no customs, bring closer to the diagonal
           tss_depth <- base_depth + (2 * step_depth)
         }
-        
+          
         if (genome_build == "hg19") {
           bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg19.bed")
         } else if (genome_build == "mm10") {
@@ -1430,27 +1485,27 @@ if(flag_inter == "FALSE"){
         } else if (genome_build == "hg38") {
           bed_tss <- file.path(data_dir, genome_build, "reference", "GENCODE_TSSs_hg38.bed")
         }
-          
+            
         draw_bed(bed_tss, "#ef0000", tss_depth, TRUE)
         legend_labels <- c(legend_labels, "transcription start sites")
         legend_colors <- c(legend_colors, "#ef0000")
 
         } else {
-          no_def_ann <- TRUE
+            no_def_ann <- TRUE
         }
-        
+          
         # Custom Annotations
         if (ann_custom != "NONE") {
           # Split the annotation files string into a vector
-         annotation_files <- unlist(strsplit(ann_custom, " "))
-         n_files <- length(annotation_files)
+          annotation_files <- unlist(strsplit(ann_custom, " "))
+          n_files <- length(annotation_files)
 
           # default base colors
           base_colors <- c("#E69F00",  # orange 
-                  "#377EB8",  # blue  
-                  "#4DAF4A",  # green
-                  "#C77CFF",  # light purple    
-                  "#984EA3")  # purple
+                "#377EB8",  # blue  
+                "#4DAF4A",  # green
+                "#C77CFF",  # light purple    
+                "#984EA3")  # purple
 
           # build dynamic depths
           track_depths <- seq(from = base_depth,
@@ -1494,18 +1549,17 @@ if(flag_inter == "FALSE"){
         # Draw legend
         if (length(legend_labels) > 0) {
           legend(-2, 125, legend = legend_labels, col = legend_colors, lwd = 1,
-                  box.lty = 0, cex = 0.8, text.col = "#888888")
+                box.lty = 0, cex = 0.8, text.col = "#888888")
         }
-      }
-      
-      if( flag_profiles ){
+      }  
+      if (flag_profiles){
         draw_profiles( )
       }
-
       device_off <- dev.off()
     }
   }
 }
+
 
 ###########################################################################
 ###########################################################################
@@ -1559,7 +1613,7 @@ if(flag_inter == "FALSE"){
     
     if( any( grepl( "chr", interval_chr, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     if (flag_matrix == "FALSE") {
@@ -1609,7 +1663,7 @@ if(flag_inter == "FALSE"){
             }
             
             if( pairs[i,"chr1"] != pairs[i,"chr2"] ){
-              cat("Please provide intra-chromosomal bedpes\n") ; quit(save="no")
+              cat("Please provide intra-chromosomal bedpes\n") ; quit(save = "no", status = 1)
             }
           }
           
@@ -1732,7 +1786,7 @@ if(flag_inter == "FALSE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", flag_norm  ))
+    cat(sprintf("       norm: %s\n", norm       ))
     cat(sprintf("      hic_A: %s\n", path_hic_A ))
     cat(sprintf("      hic_B: %s\n", path_hic_B ))
     cat(sprintf("   interval: %s\n", paste( interval_chr, interval_start, interval_end, sep = ":"  ) ))
@@ -1749,7 +1803,7 @@ if(flag_inter == "FALSE"){
     
     if( nrow(sparMat1) == 0 ){
       cat("\n No contact values found for this interval in sample A\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     sparMat2 <- straw( norm,
@@ -1761,7 +1815,7 @@ if(flag_inter == "FALSE"){
     
     if( nrow(sparMat2) == 0 ){
       cat("\n No contact values found for this interval in sample B\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     if(isFALSE(inherent)){
@@ -1822,7 +1876,7 @@ if(flag_inter == "FALSE"){
         out_file <- paste0(sample_nameA,"_",sample_nameB,"_matrix.txt")
         write.table(denDelta, file = out_file, row.names = FALSE, col.names = FALSE)
         cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
-        quit(save = "no")
+        quit(save = "no", status = 1)
       }
       
       # Max_cap and quant_cut handling
@@ -1835,7 +1889,7 @@ if(flag_inter == "FALSE"){
       
       if( isFALSE( grepl( "-", contact_color ) ) ){
         cat("\nPlease separate the two delta colors with '-' only! \n")
-        quit()
+        quit(save = "no", status = 1)
       }
       
       color_neg <- sprintf( "#%s", unlist( strsplit(contact_color,"-") )[1] )
@@ -1911,7 +1965,7 @@ if(flag_inter == "FALSE"){
       
       no_def_ann <- FALSE
       no_cus_ann <- FALSE
-      
+
       base_depth <- 6.00
       step_depth <- 0.25
 
@@ -2070,6 +2124,8 @@ if(flag_inter == "TRUE"){
     inh_col_on         <- sprintf( "#%s", Args[31] )
     inh_col_ceil       <- sprintf( "#%s", Args[32] )
     flag_matrix        <- Args[33]
+    orig_chr1          <- Args[34]
+    orig_chr2          <- Args[35]
     
     # Split the range_text at underscores
     range_components <- unlist(strsplit(range_text, "_"))
@@ -2091,14 +2147,22 @@ if(flag_inter == "TRUE"){
     
     plot_width <- dimensions$width
     plot_height <- dimensions$height
+
+    flip_axes <- (orig_chr1 != interval_chr1)
+
+    if (flip_axes) {
+      temp_val <- plot_width
+      plot_width <- plot_height
+      plot_height <- temp_val
+    }
     
     if( any( grepl( "chr", interval_chr1, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
+      quit(save = "no", status = 1)
     }
     if( any( grepl( "chr", interval_chr2, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
+      quit(save = "no", status = 1)
     }
     
     
@@ -2147,7 +2211,7 @@ if(flag_inter == "TRUE"){
             }
           }
           
-          # Reset column names (if needed)
+          # Reset column names
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
           
           # Adjust end coordinates for half open binning
@@ -2167,6 +2231,14 @@ if(flag_inter == "TRUE"){
           pairs$i_end <- (pairs$end1_bin - interval_start1) / bin_size + 1
           pairs$j_end <- (pairs$end2_bin - interval_start2) / bin_size + 1
 
+          if (flip_axes) {
+            tmp_i <- pairs$i
+            tmp_i_end <- pairs$i_end
+            pairs$i <- pairs$j
+            pairs$i_end <- pairs$j_end
+            pairs$j <- tmp_i
+            pairs$j_end <- tmp_i_end
+          }
         }
       }
     }
@@ -2192,7 +2264,7 @@ if(flag_inter == "TRUE"){
       if(flag_norm == "blank"){
         norm_factor1 <- norm_factor1
         aqua_factor1 <- 1
-        flag_nor <- "cpm"
+        flag_norm <- "cpm"
       } else if(flag_norm == "none"){
         norm_factor1 <- 1
         aqua_factor1 <- 1
@@ -2229,7 +2301,7 @@ if(flag_inter == "TRUE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", flag_norm ))
+    cat(sprintf("       norm: %s\n", norm     ))
     cat(sprintf("        hic: %s\n", path_hic ))
     cat(sprintf("   interval: %s\n", paste( new_interval_chr1, interval_start1, interval_end1, sep = ":"  ) ))
     cat(sprintf("   interval: %s\n", paste( new_interval_chr2, interval_start2, interval_end2, sep = ":"  ) ))
@@ -2247,7 +2319,7 @@ if(flag_inter == "TRUE"){
     
     if( nrow(sparMat1) == 0 ){
       cat("\n No contact values found for this interval\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     sparMat1$counts <- sparMat1$counts * norm_factor1 * aqua_factor1
@@ -2272,13 +2344,32 @@ if(flag_inter == "TRUE"){
     }
     
     denMat1    <- t(denMat1)
+
+    if (flip_axes) {
+      denMat1 <- t(denMat1)  # transpose back
+
+      tmp_chr1 <- new_interval_chr1
+      tmp_start1 <- interval_start1
+      tmp_end1 <- interval_end1
+      tmp_len1 <- interval_len1
+
+      new_interval_chr1 <- new_interval_chr2
+      interval_start1   <- interval_start2
+      interval_end1     <- interval_end2
+      interval_len1     <- interval_len2
+
+      new_interval_chr2 <- tmp_chr1
+      interval_start2   <- tmp_start1
+      interval_end2     <- tmp_end1
+      interval_len2     <- tmp_len1
+    }
     
     if(flag_matrix){ 
       sample_name <- basename(sample_dir)
       out_file <- paste0(sample_name, "_matrix.txt")
       write.table(denMat1, file = out_file, row.names = FALSE, col.names = FALSE)
       cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
-      quit(save = "no")
+      quit(save = "no", status = 1)
     }
     
     cap <- calculate_cap(denMat1, max_cap, quant_cut, flag_inter)
@@ -2323,12 +2414,12 @@ if(flag_inter == "TRUE"){
     
     
     if(flag_w == "blank"){
-      w <- calculate_w(plot_width, plot_height, A)
+      w <- calculate_w_inter(plot_width, plot_height, A)
     }
     
     if (flag_w != "blank"){
       w <- as.numeric(flag_w)
-      max_w <- calculate_w(plot_width, plot_height, A)
+      max_w <- calculate_w_inter(plot_width, plot_height, A)
       if (w > max_w){
         cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
         w <- max_w
@@ -2350,7 +2441,10 @@ if(flag_inter == "TRUE"){
     
     top <- top - 30
     
-    draw_contacts_inter(A, C, left_side = 0, bedpe, plot_width, plot_height, top)
+    draw_contacts_inter(A, C, left_side = 0, bedpe, top, w)
+
+    x_axis <- if (flip_axes) "y" else "x"
+    y_axis <- if (flip_axes) "x" else "y"
     
     if (isFALSE(flag_profiles)) {
       # Initialize legend elements
@@ -2364,10 +2458,10 @@ if(flag_inter == "TRUE"){
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
           
           # Draw annotations for x- and y-axes
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, "y", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2378,10 +2472,11 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
           
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2392,10 +2487,10 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for mm10\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
           
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2408,42 +2503,45 @@ if(flag_inter == "TRUE"){
       
       # Custom Annotations
       if (ann_custom != "NONE") {
-        # Split the annotation files string into a vector
+
+        cat("Drawing custom annotations\n")
+
         annotation_files <- unlist(strsplit(ann_custom, " "))
-        
-        # Define default colors and track depths
-        default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
-        track_depths <- c(-0.5, -0.8, -1.1, -1.4)
-        
+        n_files <- length(annotation_files)
+
+        base_depth <- -0.5
+        step_depth <- -0.3
+        track_depths <- base_depth + step_depth * seq(0, n_files - 1)
+
+        # Prepare color vector
+        if (ann_custom_colors == "NONE") {
+          default_colors <- c("#E69F00", "#00829d", "#8622b7", "#4C8219")
+          final_colors <- colorRampPalette(default_colors)(n_files)
+        } else {
+          colors <- strsplit(ann_custom_colors, " ")[[1]]
+          colors <- sapply(colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
+          if (length(colors) >= n_files) {
+            final_colors <- colors[1:n_files]
+          } else {
+            fill_colors <- colorRampPalette(c("#E69F00", "#00829d", "#8622b7", "#4C8219"))(n_files - length(colors))
+            final_colors <- c(colors, fill_colors)
+          }
+        }
+
+        # Loop through annotations
         for (i in seq_along(annotation_files)) {
           current_file <- annotation_files[i]
-          
-          # Decide which color to use
-          if (ann_custom_colors == "NONE") {
-            # Use default color
-            this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
-            cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
-          } else {
-            # Split the provided colors and make sure a '#' is included
-            colors <- unlist(strsplit(ann_custom_colors, " "))
-            if (length(colors) >= i) {
-              # Prepend '#' if necessary
-              this_color <- if (substr(colors[i], 1, 1) == "#") colors[i] else paste0("#", colors[i])
-            } else {
-              this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
-            }
-            cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
-          }
-          
-          # Draw annotations for both x and y axes
-          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "x",
-                         interval_start1, interval_len1, interval_start2, interval_len2,
-                         plot_width, plot_height)
-          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "y",
-                         interval_start1, interval_len1, interval_start2, interval_len2,
-                         plot_width, plot_height)
-          
-          # Update legend elements
+          this_color   <- final_colors[i]
+          this_depth   <- track_depths[i]
+
+          draw_bed_inter(current_file, this_color, this_depth, FALSE, w, top, x_axis,
+                        interval_start1, interval_len1, interval_start2, interval_len2,
+                        plot_width, plot_height)
+
+          draw_bed_inter(current_file, this_color, this_depth, FALSE, w, top, y_axis,
+                        interval_start1, interval_len1, interval_start2, interval_len2,
+                        plot_width, plot_height)
+
           legend_labels <- c(legend_labels, basename(current_file))
           legend_colors <- c(legend_colors, this_color)
         }
@@ -2508,6 +2606,13 @@ if(flag_inter == "TRUE"){
     sample_dirA        <- Args[29]
     sample_dirB        <- Args[30]
     flag_matrix        <- Args[31]
+    inh_col_floor      <- sprintf( "#%s", Args[32] )
+    inh_col_off        <- sprintf( "#%s", Args[33] )
+    inh_col_on         <- sprintf( "#%s", Args[34] )
+    inh_col_ceil       <- sprintf( "#%s", Args[35] )
+    inherent           <- as.logical(Args[36])
+    orig_chr1          <- Args[37]
+    orig_chr2          <- Args[38]
     
     # Split the range_text at underscores
     range_components <- unlist(strsplit(range_text, "_"))
@@ -2523,11 +2628,11 @@ if(flag_inter == "TRUE"){
     
     if( any( grepl( "chr", interval_chr1, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
+      quit(save = "no", status = 1)
     }
     if( any( grepl( "chr", interval_chr2, ignore.case = T ) ) == FALSE ){
       cat("\n  Please add 'chr' prefix for chromosome\n")
-      quit(save="no")
+      quit(save = "no", status = 1)
     }
     
     interval_len1 <- interval_end1 - interval_start1
@@ -2539,6 +2644,14 @@ if(flag_inter == "TRUE"){
     
     plot_width <- dimensions$width
     plot_height <- dimensions$height
+
+    flip_axes <- (orig_chr1 != interval_chr1)
+    
+    if (flip_axes) {
+      temp_val <- plot_width
+      plot_width <- plot_height
+      plot_height <- temp_val
+    }
     
     ## 'chr' prefix handler:
     
@@ -2624,6 +2737,15 @@ if(flag_inter == "TRUE"){
           pairs$i_end <- (pairs$end1_bin - interval_start1) / bin_size + 1
           pairs$j_end <- (pairs$end2_bin - interval_start2) / bin_size + 1
 
+          if (flip_axes) {
+            tmp_i <- pairs$i
+            tmp_i_end <- pairs$i_end
+            pairs$i <- pairs$j
+            pairs$i_end <- pairs$j_end
+            pairs$j <- tmp_i
+            pairs$j_end <- tmp_i_end
+          }
+
         }
       }
     }
@@ -2698,7 +2820,7 @@ if(flag_inter == "TRUE"){
     ## Process matrix:
     
     cat(      "\n  straw parameters\n")
-    cat(sprintf("       norm: %s\n", flag_norm  ))
+    cat(sprintf("       norm: %s\n", norm       ))
     cat(sprintf("      hic_A: %s\n", path_hic_A ))
     cat(sprintf("      hic_B: %s\n", path_hic_B ))
     cat(sprintf("   interval: %s\n", paste( interval_chr1, interval_start1, interval_end1, sep = ":"  ) ))
@@ -2716,7 +2838,7 @@ if(flag_inter == "TRUE"){
     
     if( nrow(sparMat1) == 0 ){
       cat("\n No contact values found for this interval in sample A\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     sparMat2 <- straw( norm,
@@ -2728,7 +2850,7 @@ if(flag_inter == "TRUE"){
     
     if( nrow(sparMat2) == 0 ){
       cat("\n No contact values found for this interval in sample B\n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     sparMat1$counts <- sparMat1$counts * norm_factor1 * aqua_factor1
@@ -2780,6 +2902,25 @@ if(flag_inter == "TRUE"){
     }
     
     denDelta  <- denMat2 - denMat1
+
+    if (flip_axes) {
+      denDelta <- t(denDelta)  # transpose back
+
+      tmp_chr1 <- new_interval_chr1
+      tmp_start1 <- interval_start1
+      tmp_end1 <- interval_end1
+      tmp_len1 <- interval_len1
+
+      new_interval_chr1 <- new_interval_chr2
+      interval_start1   <- interval_start2
+      interval_end1     <- interval_end2
+      interval_len1     <- interval_len2
+
+      new_interval_chr2 <- tmp_chr1
+      interval_start2   <- tmp_start1
+      interval_end2     <- tmp_end1
+      interval_len2     <- tmp_len1
+    }
     
     if(flag_matrix){ 
       sample_nameA <- basename(sample_dirA)
@@ -2787,7 +2928,7 @@ if(flag_inter == "TRUE"){
       out_file <- paste0(sample_nameA,"_",sample_nameB,"_matrix.txt")
       write.table(denDelta, file = out_file, row.names = FALSE, col.names = FALSE)
       cat("\n", out_file, " output here:", paste0(out_dir, "/", out_file), "\n")
-      quit(save = "no")
+      quit(save = "no", status = 1)
     }
     
     
@@ -2795,11 +2936,11 @@ if(flag_inter == "TRUE"){
     cap <- calculate_cap(denDelta, max_cap, quant_cut, flag_inter)
     cap <- round(cap, 3)
     
-    cat(sprintf("       cap: %s\n", cap))
+    cat(sprintf("        cap: %s\n", cap))
     
     if( isFALSE( grepl( "-", contact_color ) ) ){
       cat("\nPlease separate the two delta colors with '-' only! \n")
-      quit()
+      quit(save = "no", status = 1)
     }
     
     color_neg <- sprintf( "#%s", unlist( strsplit(contact_color,"-") )[1] )
@@ -2844,12 +2985,12 @@ if(flag_inter == "TRUE"){
     
     
     if(flag_w == "blank"){
-      w <- calculate_w(plot_width, plot_height, A)
+      w <-  calculate_w_inter(plot_width, plot_height, A)
     }
     
     if (flag_w != "blank"){
       w <- as.numeric(flag_w)
-      max_w <- calculate_w(plot_width, plot_height, A)
+      max_w <-  calculate_w_inter(plot_width, plot_height, A)
       if (w > max_w){
         cat(sprintf("\n\nUser-supplied -w value is too large for the given range and/or resolution.\nThe maximum -w acceptable for these parameters is %f\n\n", max_w))
         w <- max_w
@@ -2871,13 +3012,16 @@ if(flag_inter == "TRUE"){
     
     top <- top - 30
     
-    draw_contacts_inter(A, C, left_side = 0, bedpe, plot_width, plot_height, top)
+    draw_contacts_inter(A, C, left_side = 0, bedpe, top, w)
+
+    x_axis <- if (flip_axes) "y" else "x"
+    y_axis <- if (flip_axes) "x" else "y"
     
     if (isFALSE(flag_profiles)) {
       # Initialize legend elements
       legend_labels <- c()
       legend_colors <- c()
-      
+
       # Default Annotations
       if (ann_default) {
         if (genome_build == "hg19") {
@@ -2885,10 +3029,10 @@ if(flag_inter == "TRUE"){
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg19.bed", sep = "")
           
           # Draw annotations for x- and y-axes
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, "y", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2899,10 +3043,11 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for hg38\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_hg38.bed", sep = "")
           
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+
+          draw_bed_inter(bed_tss, "#ef0000", -0.2, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2913,10 +3058,10 @@ if(flag_inter == "TRUE"){
           cat("\nDrawing default annotations for mm10\n")
           bed_tss <- paste(data_dir, "/", genome_build, "/reference/GENCODE_TSSs_200bp_mm10.bed", sep = "")
           
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "x", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, x_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
-          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, "y", 
+          draw_bed_inter(bed_tss, "#ef0000", -0.1, TRUE, w, top, y_axis, 
                          interval_start1, interval_len1, interval_start2, interval_len2, 
                          plot_width, plot_height)
           
@@ -2929,40 +3074,45 @@ if(flag_inter == "TRUE"){
       
       # Custom Annotations
       if (ann_custom != "NONE") {
-        # Split the annotation files string into a vector
+
+        cat("Drawing custom annotations\n")
+
         annotation_files <- unlist(strsplit(ann_custom, " "))
-        
-        # Define default colors and track depths
-        default_colors <- c("#ef0000", "#00829d", "#8622b7", "#4C8219")
-        track_depths <- c(-0.5, -0.8, -1.1, -1.4)
-        
+        n_files <- length(annotation_files)
+
+        base_depth <- -0.5
+        step_depth <- -0.3
+        track_depths <- base_depth + step_depth * seq(0, n_files - 1)
+
+        # Prepare color vector
+        if (ann_custom_colors == "NONE") {
+          default_colors <- c("#E69F00", "#00829d", "#8622b7", "#4C8219")
+          final_colors <- colorRampPalette(default_colors)(n_files)
+        } else {
+          colors <- strsplit(ann_custom_colors, " ")[[1]]
+          colors <- sapply(colors, function(x) if (substr(x, 1, 1) == "#") x else paste0("#", x))
+          if (length(colors) >= n_files) {
+            final_colors <- colors[1:n_files]
+          } else {
+            fill_colors <- colorRampPalette(c("#E69F00", "#00829d", "#8622b7", "#4C8219"))(n_files - length(colors))
+            final_colors <- c(colors, fill_colors)
+          }
+        }
+
+        # Loop through annotations
         for (i in seq_along(annotation_files)) {
           current_file <- annotation_files[i]
-          
-          # Decide which color to use
-          if (ann_custom_colors == "NONE") {
-            this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
-            cat(sprintf("\nUsing default color %s for custom annotation file %s", this_color, current_file))
-          } else {
-            # Split the provided colors and ensure a '#' is included
-            colors <- unlist(strsplit(ann_custom_colors, " "))
-            if (length(colors) >= i) {
-              this_color <- if (substr(colors[i], 1, 1) == "#") colors[i] else paste0("#", colors[i])
-            } else {
-              this_color <- default_colors[(i - 1) %% length(default_colors) + 1]
-            }
-            cat(sprintf("\nDrawing custom annotations for file %s with color %s", current_file, this_color))
-          }
-          
-          # Draw annotations for both x and y axes
-          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "x",
-                         interval_start1, interval_len1, interval_start2, interval_len2,
-                         plot_width, plot_height)
-          draw_bed_inter(current_file, this_color, track_depths[(i - 1) %% length(track_depths) + 1], FALSE, w, top, "y",
-                         interval_start1, interval_len1, interval_start2, interval_len2,
-                         plot_width, plot_height)
-          
-          # Update legend elements using the base name of the file
+          this_color   <- final_colors[i]
+          this_depth   <- track_depths[i]
+
+          draw_bed_inter(current_file, this_color, this_depth, FALSE, w, top, x_axis,
+                        interval_start1, interval_len1, interval_start2, interval_len2,
+                        plot_width, plot_height)
+
+          draw_bed_inter(current_file, this_color, this_depth, FALSE, w, top, y_axis,
+                        interval_start1, interval_len1, interval_start2, interval_len2,
+                        plot_width, plot_height)
+
           legend_labels <- c(legend_labels, basename(current_file))
           legend_colors <- c(legend_colors, this_color)
         }
@@ -2970,7 +3120,7 @@ if(flag_inter == "TRUE"){
         no_cus_ann <- TRUE
       }
       
-      # Draw the legend if there are any annotation labels
+      # Draw the legend
       if (length(legend_labels) > 0) {
         legend(-2, 127, legend = legend_labels, col = legend_colors, lwd = 1,
                box.lty = 0, cex = 0.8, text.col = "#888888")
