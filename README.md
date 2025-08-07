@@ -5,7 +5,7 @@
 ## Table of Contents
 - [About](#about)
 - [Installation](#installation)
-- [Tools and Recipes](#tools-and-recipes)
+- [Tools and Workflows](#tools-and-workflows)
 - [License](#license)
 
 
@@ -203,25 +203,30 @@ If sample name is `GM12878`, the data structure should look like:
        ++ GM12878.mergeStats.txt
 ```
 
-## Tools and Recipes
+## Tools and Workflows
 
+#### Tools
 You can find detailed concept tutorials and usage instructions for each tool in our [Docs](https://docs.axiotl.com/tools/).
 
-Additionally, we've created a series of guided workflows we call "recipes". Each one walks through a specific analysis task using AQuA-tools.
+#### Workflows
+We've created two types of workflows: Code Snippets and Biological Recipes. Code snippets are short, focused scripts that show how to use AQuA-Tools for specific tasks, such as calling, visualizing, or intersecting loops. Code snippets are runnable as-is in both Tinker and Docker environments. 
 
-#### Recipes for Local Installation:  
-[Recipe 00: Assessing differences in interactions between peaks](https://docs.axiotl.com/recipes/recipe_00/)  
+[Snippet: Calling Loops](https://docs.axiotl.com/workflows/snippets/calling_loops/)  
+[Snippet: Visualizing Loops](https://docs.axiotl.com/workflows/snippets/visualizing_loops/)  
+[Snippet: Intersecting Loops](https://docs.axiotl.com/workflows/snippets/intersecting_loops/)  
+
+Biological Recipes are more robust and realistic workflows that guide users through complete analyses focused on answering biological questions. We've designed recipes for local installation and Docker/Tinker container-based environments.
+
+**Recipes for Local Installation:**  
+[Recipe 00: Assessing differences in interactions between peaks](https://docs.axiotl.com/workflows/recipes/recipe_00/) 
 Designed for the local installation of AQuA-tools. Highlights the use of AQuA normalization for exploring differences in interaction strength using `build_bedpe`, `intersect_bedpe`, `query_bedpe`, `union_bedpe` and `plot_APA`.
 
-#### Recipes for Docker/Tinker Environments:  
-[Recipe 01: Calling loops from a sample](https://docs.axiotl.com/recipes/recipe_01/)  
+**Recipes for Docker/Tinker Environments**  
+[Recipe 01: Calling loops from a sample](https://docs.axiotl.com/workflows/recipes/recipe_01/)  
 Demonstrates how to call genome-wide loops from `.hic` files using `extract_bedpe` and visualize with `plot_contacts`.
 
-[Recipe 02: Loop gains and losses between two samples](https://docs.axiotl.com/recipes/recipe_02/)  
+[Recipe 02: Loop gains and losses between two samples](https://docs.axiotl.com/workflows/recipes/recipe_02/)  
 Shows how to filter, compare, and visualize loop subsets using the tools `intersect_bedpe` , `query_bedpe`, `union_bedpe`, and `plot_APA`.
-
-[Recipe 03: Making sense of loop networks](https://docs.axiotl.com/recipes/recipe_03/)  
-Focuses on clustering loops and annotating them with biological context using `cluster_bedpe` and `annotate_cluster`.
 
 
 ## License
