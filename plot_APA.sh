@@ -460,20 +460,34 @@ cut -f1-6 "$P" > "$tmp_trimmed"
 
 awk -v r="$r" 'BEGIN { OFS="\t" }
 {
-  if ((($3 - $2) < r) || (($6 - $5) < r)) {
-    # If either interval is too short to bin, output the original coordinates
-    print $1, $2, $3, $4, $5, $6;
-  } else {
-    end1_adj = $3 - r;
-    end2_adj = $6 - r;
-    for (i = $2; i <= end1_adj; i += r) {
-      for (j = $5; j <= end2_adj; j += r) {
-        print $1, i, i + r, $4, j, j + r;
+  len1 = $3 - $2
+  len2 = $6 - $5
+
+  if (len1 <= r && len2 <= r) {
+    # too small to binify, print as is
+    print $1, $2, $3, $4, $5, $6
+
+  } else if (len1 > r && len2 > r) {
+    # binify both anchors
+    for (i = $2; i <= ($3 - r); i += r) {
+      for (j = $5; j <= ($6 - r); j += r) {
+        print $1, i, i + r, $4, j, j + r
       }
+    }
+
+  } else if (len1 > r) {
+    # only binify anchor1
+    for (i = $2; i <= ($3 - r); i += r) {
+      print $1, i, i + r, $4, $5, $6
+    }
+
+  } else if (len2 > r) {
+    # only binify anchor2
+    for (j = $5; j <= ($6 - r); j += r) {
+      print $1, $2, $3, $4, j, j + r
     }
   }
 }' "$tmp_trimmed" > "$tmp_binified"
-
 
 # Convert tmp_binified to absolute path
 tmp_binified=$(readlink -f "$tmp_binified")
