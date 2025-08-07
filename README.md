@@ -215,7 +215,7 @@ We've created two types of workflows: Code Snippets and Biological Recipes. Code
 [Snippet: Visualizing Loops](https://docs.axiotl.com/workflows/snippets/visualizing_loops/)  
 [Snippet: Intersecting Loops](https://docs.axiotl.com/workflows/snippets/intersecting_loops/)  
 
-Biological Recipes are more robust and realistic workflows that guide users through complete analyses focused on answering biological questions. We've designed recipes for local installation and Docker/Tinker container-based environments.
+Biological Recipes are workflows that guide users through complete analyses focused on answering biological questions. We've designed recipes for local installation and Docker/Tinker container-based environments.
 
 **Recipes for Local Installation:**  
 [Recipe 00: Assessing differences in interactions between peaks](https://docs.axiotl.com/workflows/recipes/recipe_00/) 
