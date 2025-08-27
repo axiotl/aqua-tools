@@ -102,61 +102,71 @@ system(
 )
 
 
-pair_id <- read.table(
-  paste0(temp_path,"/","pair_id.txt"), 
-  sep = " ")
+pair_file <- paste0(temp_path,"/","pair_id.txt")
 
-pair_id <- data.frame(
-  x = pmin(pair_id$V1, pair_id$V2),
-  y = pmax(pair_id$V1, pair_id$V2)
-)
-
-pair_id <- pair_id[order(pair_id$x, pair_id$y),]
-pair_id <- unique(pair_id)
-
-g               <- graph_from_edgelist(as.matrix(pair_id), directed = FALSE)
-components      <- components(g)
-pair_id$cluster <- components$membership[pair_id$x]
-pair_id$cluster <- as.integer(factor(pair_id$cluster))
-
-cluster_mapping <- rbind(
-  pair_id %>% select(id = x, cluster),
-  pair_id %>% select(id = y, cluster)
-) %>% distinct()
-
-bedpe <- bedpe %>%
-  full_join(cluster_mapping, by = "id")
-
-
-
-vec <- bedpe$cluster
-
-unique_counter <- 1
-index_map <- list()
-
-for (i in 1:length(vec)) {
+if(!file.exists(pair_file) || file.info(pair_file)$size == 0){
   
-  if (is.na(vec[i])) {
+  bedpe$cluster <- paste0("cluster-", 1:nrow(bedpe))
+  
+} else {
+
+  pair_id <- read.table(
+    paste0(temp_path,"/","pair_id.txt"), 
+    sep = " ")
+  
+  pair_id <- data.frame(
+    x = pmin(pair_id$V1, pair_id$V2),
+    y = pmax(pair_id$V1, pair_id$V2)
+  )
+  
+  pair_id <- pair_id[order(pair_id$x, pair_id$y),]
+  pair_id <- unique(pair_id)
+  
+  g               <- graph_from_edgelist(as.matrix(pair_id), directed = FALSE)
+  components      <- components(g)
+  pair_id$cluster <- components$membership[pair_id$x]
+  pair_id$cluster <- as.integer(factor(pair_id$cluster))
+  
+  cluster_mapping <- rbind(
+    pair_id %>% select(id = x, cluster),
+    pair_id %>% select(id = y, cluster)
+  ) %>% distinct()
+  
+  bedpe <- bedpe %>%
+    full_join(cluster_mapping, by = "id")
+  
+  
+  
+  vec <- bedpe$cluster
+  
+  unique_counter <- 1
+  index_map <- list()
+  
+  for (i in 1:length(vec)) {
     
-    vec[i]         <- unique_counter
-    unique_counter <- unique_counter + 1
-    
-  } else {
-    
-    if (!is.null(index_map[[as.character(vec[i])]])) {
-      vec[i] <- index_map[[as.character(vec[i])]]
+    if (is.na(vec[i])) {
       
-    } else {
-      
-      index_map[[as.character(vec[i])]] <- unique_counter
       vec[i]         <- unique_counter
       unique_counter <- unique_counter + 1
       
+    } else {
+      
+      if (!is.null(index_map[[as.character(vec[i])]])) {
+        vec[i] <- index_map[[as.character(vec[i])]]
+        
+      } else {
+        
+        index_map[[as.character(vec[i])]] <- unique_counter
+        vec[i]         <- unique_counter
+        unique_counter <- unique_counter + 1
+        
+      }
     }
   }
+  
+  bedpe$cluster <- paste0("cluster-",vec)
+  
 }
-
-bedpe$cluster <- paste0("cluster-",vec)
 
 # remove flank
 bedpe$start1 <- bedpe$start1 + flank
