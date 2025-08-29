@@ -35,6 +35,7 @@ AQuA tools `annotate_clusters`, `plot_contacts` and `extract_bedpe` will be inco
 - Faster outputs for large `query_bedpe` calls
 
 The free tier of Tinker is capped at 40 total hours of machine use time, following which users can request access to Tinker Private which additionally comes with:
+- **Samples**: Use the Tinker platform and AQuA tools on your HiC/HiChIP samples
 - **Collaborative Features**: Share files and analyses with team members
 - **Scalable Computing**: Handle large datasets efficiently
 - **Unlimited access**: No time cap for Tinker use time
