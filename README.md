@@ -15,6 +15,8 @@
 ### Publication
 >Gryder, B.E., Khan, J. & Stanton, B.Z. Measurement of differential chromatin interactions with absolute quantification of architecture (AQuA-HiChIP). Nat Protoc 15, 1209–1236 (2020). https://doi.org/10.1038/s41596-019-0285-9
 
+>Chakraborty and Morgan _et. al._ AQuA Tools: clear and reliable BEDPE operations for 3D genomics. Bioinformatics, Volume 41, Issue 9, September 2025. https://doi.org/10.1093/bioinformatics/btaf510
+
 
 ## Installation
 AQuA-Tools can be used through any of the following entrypoints:
