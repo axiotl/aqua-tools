@@ -171,10 +171,8 @@ generate_sequences <- function(txt, bin_size) {
     return(NA)
   }
 
-  # Cnvert the second and third parts (start, end) to numeric
   parts_numeric <- suppressWarnings(as.numeric(parts[-1]))
 
-  # Check for NA
   if (any(is.na(parts_numeric))) {
     return(NA)
   }
@@ -670,8 +668,8 @@ call_two_sample_straw_bedpe <- function( bedpe_list, flag_inherent, flag_fix, fo
     sample_B_txt_L <- as.character( bedpe_list[3]$sample_B_txt_L )
     sample_B_txt_R <- as.character( bedpe_list[4]$sample_B_txt_R )
     
-    midpoint_1 <- as.character( bedpe_list[3]$midpoint_1_bin )
-    midpoint_2 <- as.character( bedpe_list[4]$midpoint_2_bin )
+    midpoint_1 <- as.character( bedpe_list[5]$midpoint_1_bin )
+    midpoint_2 <- as.character( bedpe_list[6]$midpoint_2_bin )
     
     mat_1 <- straw( norm, hic_A, sample_A_txt_L, sample_A_txt_R, "BP", bin_size )
     mat_2 <- straw( norm, hic_B, sample_B_txt_L, sample_B_txt_R, "BP", bin_size )
