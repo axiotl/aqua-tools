@@ -5,7 +5,7 @@ aqua_dir=$HOME/aqua_tools
 
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
-ctrlc_cont=0
+ctrlc_count=0
 
 function no_sigint {
 
