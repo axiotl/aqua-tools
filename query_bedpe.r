@@ -564,7 +564,7 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       
       count_1 <- process_formula(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size, norm_factor1, aqua_factor1)
       
-      new_feet <- calculate_new_feet(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size)
+      new_feet <- calculate_new_feet(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size, txt_L, txt_R)
       feet1 <- new_feet$feet1
       feet2 <- new_feet$feet2
       
@@ -582,7 +582,7 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       
       count_2 <- process_formula(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size, norm_factor2, aqua_factor2)
 
-      new_feet <- calculate_new_feet(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size)
+      new_feet <- calculate_new_feet(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size, txt_L, txt_R)
       feet1 <- new_feet$feet1
       feet2 <- new_feet$feet2
       
@@ -597,12 +597,12 @@ obtain_two_sample_counts <- function( mat_1, mat_2, txt_L, txt_R, midpoint_1, mi
       sparse_mat_1 <- initialize_matrix(dim_1, dim_2)
       sparse_mat_1 <- populate_matrix(sparse_mat_1, mat_1)
       count_1 <- process_formula(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size, norm_factor1, aqua_factor1)
-      new_feet_1 <- calculate_new_feet(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size)
+      new_feet_1 <- calculate_new_feet(sparse_mat_1, formula, midpoint_1, midpoint_2, bin_size, txt_L, txt_R)
       
       sparse_mat_2 <- initialize_matrix(dim_1, dim_2)
       sparse_mat_2 <- populate_matrix(sparse_mat_2, mat_2)
       count_2 <- process_formula(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size, norm_factor2, aqua_factor2)
-      new_feet_2 <- calculate_new_feet(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size)
+      new_feet_2 <- calculate_new_feet(sparse_mat_2, formula, midpoint_1, midpoint_2, bin_size, txt_L, txt_R)
       
       feet1 <- c(new_feet_1$feet1, new_feet_2$feet1)
       feet2 <- c(new_feet_1$feet2, new_feet_2$feet2)
