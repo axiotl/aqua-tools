@@ -57,6 +57,9 @@ RUN wget -O latest_aqua_tools.zip "https://github.com/axiotl/aqua-tools/archive/
     mv aqua-tools-main aqua_tools && \
     rm latest_aqua_tools.zip
 
+# Change tool ownership to user
+RUN chown -R ubuntu:ubuntu /home/ubuntu
+
 # Make tool scripts executable and symlink them into PATH
 WORKDIR /home/ubuntu/aqua_tools
 RUN chmod +x *.sh && \
