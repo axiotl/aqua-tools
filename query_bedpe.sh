@@ -5,19 +5,6 @@ aqua_dir=$HOME/aqua_tools
 
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
-ctrlc_count=0
-
-function no_sigint {
-
-    let ctrlc_count++
-    if [[ $ctrlc_count == 1 ]]; then
-        exit 1
-    fi
-
-}
-
-trap no_sigint EXIT
-
 function usage {
     echo -e "usage: "
     echo -e "  query_bedpe.sh \\"
