@@ -156,6 +156,26 @@ if [ "$R" == "range"    ] && [ "$T" == "NULL"   ] ; then
     exit
 fi
 
+# Validate range if supplied (i.e. user changed it from the default "range")
+if [[ -n $R && "$R" != "range" ]]; then
+    # Must look like chrom:start:end with numeric start/end
+    if ! [[ "$R" =~ ^[^:]+:[0-9]+:[0-9]+$ ]]; then
+        echo "Error: invalid range '$R'."
+        echo "Expected format: chr:start:end (e.g. chr1:1000000:11000000)"
+        exit 1
+    fi
+
+    IFS=':' read -r R_CHR R_START R_END <<< "$R"
+    if (( R_START < 0 )); then
+        echo "Error: range start ($R_START) must be >= 0."
+        exit 1
+    fi
+    if (( R_END <= R_START )); then
+        echo "Error: range end ($R_END) must be greater than start ($R_START)."
+        exit 1
+    fi
+fi
+
 
 if [ "$m" != "loop" ] && [ "$m" != "flare" ] && [ "$m" != "glob" ] && [ "$m" != "minimal" ]; then
     echo "mode stritcly either loop, flare, minimal or glob"
