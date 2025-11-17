@@ -77,7 +77,6 @@ if(analysis_type == "range"){
   interval_end   <- ceiling(  end/bin_size)*bin_size
   
   if((interval_end - interval_start)/bin_size < 10 ){
-    cat("Range less than 10 bins? Expand your imagination! \n")
     cat("Please enter a range of at least 10 bins \n")
     q( save = "no" )
   }
