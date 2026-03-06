@@ -19,7 +19,7 @@ function usage {
 
 function help {
     echo 
-    echo "Retrieve statistics for the specified sample and genome build"
+    echo "Retrieve read count statistics for a specified sample and genome build"
     echo
     echo "---------------"
     echo "OPTIONS"
