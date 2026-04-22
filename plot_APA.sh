@@ -579,8 +579,7 @@ then
     stat_str_A=$(join_array "${stat_paths_A[@]}")
     label_str_A=$(join_array "${version_dirs_A[@]}")
 
-    #Rscript $aqua_dir/plot_APA.r \
-    Rscript /mnt/c/Users/laura/Axiotl/aqua-tools/plot_APA.r \
+    Rscript $aqua_dir/plot_APA.r \
       "${hic_str_A}" \
       "${label_str_A}" \
       "${c}" \
@@ -650,8 +649,7 @@ then
 
     #----------------------------------
 
-    #Rscript $aqua_dir/plot_APA.r \
-    Rscript /mnt/c/Users/laura/Axiotl/aqua-tools/plot_APA.r \
+    Rscript $aqua_dir/plot_APA.r \
       "${hic_str_A}" \
       "${hic_str_B}" \
       "${label_str_A}" "${label_str_B}" \
