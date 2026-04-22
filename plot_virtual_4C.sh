@@ -4,14 +4,11 @@ OPTIND=1
 norm_method=NONE
 unit=BP
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 
-sample_sheet="/home/ubuntu/setup/sample_sheet.txt"
-
-
-juicer_tools='java -jar ~/juicer_tools_1.19.02.jar'
+sample_sheet="$HOME/setup/sample_sheet.txt"
 
 
 function usage {
@@ -222,6 +219,14 @@ if [[ "$Q" != "blank" && "$i" != "FALSE" ]]; then
   i="TRUE"
 fi
 
+#----------------------------------
+
+if [[ $t != "blank" ]]; then
+  if ! [[ $t =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$t <= 0" | bc -l) )); then
+    echo -e "\n--height parameter must be a positive number"
+    exit 1
+  fi
+fi
 
 # Generate output name if not provided
 if [[ -z $O ]]; then

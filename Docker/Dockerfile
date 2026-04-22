@@ -13,6 +13,8 @@ RUN apt update && apt install -y \
     libcurl4-openssl-dev \
     libxml2-dev \
     libssl-dev \
+    texlive-extra-utils \
+    poppler-utils \
     wget \
     curl \
     vim \

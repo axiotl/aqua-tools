@@ -1,7 +1,7 @@
 #!/bin/bash
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 echo "List of AQuA tools on this Tinkerbox"
 echo

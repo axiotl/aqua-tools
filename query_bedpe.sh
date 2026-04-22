@@ -1,7 +1,7 @@
 #!/bin/bash
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
@@ -33,7 +33,7 @@ function help {
     echo "  [ -r|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
     echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, or sum. Default center"
     echo "  [ -F|--fix           ] : If FALSE, reports new coordinates using center or max arithmetic. Default TRUE"
-    echo "  [    --expand        ] : Expands bedpe feet in both directions by supplied value in base pairs. Default 0"
+    echo "  [    --expand        ] : Expands 1D bedpe feet in both directions by given bin value. Default 0"
     echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default FALSE"
     echo "  [ -m|--preserve_meta ] : If TRUE, bedpe metadata columns will be preserved. Default TRUE"
     echo "  [ -c|--cores         ] : Number of cores to use, default is determined automatically"
@@ -85,7 +85,7 @@ H=blank
 I=blank
 c="blank"
 
-while getopts ":P:A:H:I:G:Q:B:r:f:F:e:i:m:c:h" OPT
+while getopts ":P:A:H:I:G:Q:B:r:f:F:S:s:p:e:i:m:c:h" OPT
 do
     case $OPT in
   P) P=$OPTARG;;
@@ -98,6 +98,9 @@ do
   r) r=$OPTARG;;
   f) f=$OPTARG;;
   F) F=$OPTARG;;
+  S) S=$OPTARG;;
+  s) s=$OPTARG;;
+  p) p=$OPTARG;;
   e) e=$OPTARG;;
   i) i=$OPTARG;;
   m) m=$OPTARG;;
@@ -433,6 +436,7 @@ if [ "$two_sample" == "FALSE" ]
 then
     Rscript \
     $aqua_dir/query_bedpe.r \
+      --driver \
       $P \
       $r \
       $path_hic_A \
@@ -456,6 +460,7 @@ if [ "$two_sample" == "TRUE" ]
 then
     Rscript \
     $aqua_dir/query_bedpe.r \
+      --driver \
       $P \
       $r \
       $path_hic_A \

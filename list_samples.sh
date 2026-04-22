@@ -1,5 +1,7 @@
 #!/bin/bash
 
+LAB_DATA_DIR="${LAB_DATA_DIR:-$HOME/lab-data}"
+
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
 
@@ -9,7 +11,7 @@ print_samples_for_genome() {
     local printed_header=0  # Flag to check if header is printed
 
     # Process the sample sheet
-    awk -v genome="$G" -F '\t' '
+    awk -v genome="$G" -v lab_data_dir="$LAB_DATA_DIR" -F '\t' '
      function add_commas(num) {
         if (num == "." || num == "" || num == "0") return "."
         result = ""
@@ -23,7 +25,7 @@ print_samples_for_genome() {
     # Process each line of the sample sheet
     NR>1 && $2 == genome {
         default_val = ($6 == "1" ? "Y" : "N");  # Determine default value
-        sample_dir="/home/ubuntu/lab-data/" genome "/" $1  # Sample directory path
+        sample_dir=lab_data_dir "/" genome "/" $1  # Sample directory path
         if (system("[ -d \"" sample_dir "\" ]") == 0) {  # Check if sample directory exists
             has_samples = 1  # Set flag if samples exist
             versioned_sample = $1 "_version_" $5  # Construct versioned sample name

@@ -3,8 +3,9 @@ suppressPackageStartupMessages(library(strawr))
 
 options(scipen = 999)
 options(warn = -1 )
+options(help_type = "text")
 
-data_dir <- "~/lab-data"
+data_dir <- Sys.getenv("LAB_DATA_DIR", path.expand("~/lab-data"))
 
 Args <- commandArgs(trailingOnly=T)
 
@@ -73,28 +74,28 @@ calculate_cap <- function(
       return(calculated_cap)
     }
   } else {
-    modified_mat <- zero_diag(denMat, 4)
-    non_zero_values <- modified_mat[modified_mat != 0]
-  }
-  
-  # Calculate skewness
-  skewness <- calculate_skewness(non_zero_values)
-  
-  # Define thresholds for skewness to apply scaling factors
-  skewness_threshold1 <- 1  # For moderate skewness
-  skewness_threshold2 <- 2  # For high skewness
-  
-  # Determine the scaling factor based on skewness
-  scaling_factor <- ifelse(abs(skewness) > skewness_threshold2, 3,
-                           ifelse(abs(skewness) > skewness_threshold1, 2, 1))
-  
-  # Calculate the nth percentile of the absolute values
-  high_percentile <- quantile(abs(non_zero_values), probs = 0.98, na.rm = TRUE)
-  
-  # Apply scaling factor to high percentile
-  cap_value <- high_percentile * scaling_factor
-  
-  return(abs(cap_value))
+      modified_mat <- zero_diag(denMat, 4)
+      non_zero_values <- modified_mat[modified_mat != 0]
+    }
+    
+    # Calculate skewness
+    skewness <- calculate_skewness(non_zero_values)
+    
+    # Define thresholds for skewness to apply scaling factors
+    skewness_threshold1 <- 1  # For moderate skewness
+    skewness_threshold2 <- 2  # For high skewness
+    
+    # Determine the scaling factor based on skewness
+    scaling_factor <- ifelse(abs(skewness) > skewness_threshold2, 3,
+                             ifelse(abs(skewness) > skewness_threshold1, 2, 1))
+    
+    # Calculate the nth percentile of the absolute values
+    high_percentile <- quantile(abs(non_zero_values), probs = 0.98, na.rm = TRUE)
+    
+    # Apply scaling factor to high percentile
+    cap_value <- high_percentile * scaling_factor
+    
+    return(abs(cap_value))
 }
 
 draw_scale <- function(
@@ -176,7 +177,6 @@ draw_title <- function(
   }
   text(-2, top + 2, labels = title, col = "#888888", pos = 4, cex = 0.8)
 }
-
 
 draw_viewpoints <- function( A, C, left_side, viewpoint_start, analysis_type, height = "blank"){
   
@@ -331,34 +331,35 @@ draw_viewpoints <- function( A, C, left_side, viewpoint_start, analysis_type, he
               points( x0+(x1-x0)/2, y0-1, cex = 0.3, pch = 2, bg = "#aaaaaa", col = "#000000" )
             }
           }
-        
-          segments(
-            min(coordinates[,"x0"])-1,
-            min(coordinates[,"y0"]) + 0.5,
-            min(coordinates[,"x0"])-1,
-            max(coordinates[,"y1"]) - 0.5,
-            col = "#aaaaaa",
-            lwd = 0.1
-          )
-          
-          text(
-            min(coordinates[,"x0"])-1,
-            min(coordinates[,"y0"]),
-            labels = round(min(v4C_slice_spline$V2),2),
-            col = "#aaaaaa", cex = 0.2
-          )
-          
-          text(
-            min(coordinates[,"x0"])-1,
-            max(coordinates[,"y1"]),
-            labels = round(max(v4C_slice_spline$V2),2),
-            col = "#aaaaaa", cex = 0.2
-          )
         }
+        
+        segments(
+          min(coordinates[,"x0"])-1,
+          min(coordinates[,"y0"]) + 0.5,
+          min(coordinates[,"x0"])-1,
+          max(coordinates[,"y1"]) - 0.5,
+          col = "#aaaaaa",
+          lwd = 0.1
+        )
+        
+        text(
+          min(coordinates[,"x0"])-1,
+          min(coordinates[,"y0"]),
+          labels = round(min(v4C_slice_spline$V2),2),
+          col = "#aaaaaa", cex = 0.2
+        )
+        
+        text(
+          min(coordinates[,"x0"])-1,
+          max(coordinates[,"y1"]),
+          labels = round(max(v4C_slice_spline$V2),2),
+          col = "#aaaaaa", cex = 0.2
+        )
       }
     }
   }
 }
+
 
 
 zero_diag <- function( matrix, width ){
@@ -503,7 +504,7 @@ if( analysis_type == "single_sample" ){
   cat(sprintf("  norm_factor:  %f\n", norm_factor1 ))
   cat(sprintf("  aqua_factor:  %f\n", aqua_factor1 ))
   
-  
+
   sparMat1 <- straw( norm_method, 
                      path_hic,
                      paste( interval_chr, interval_start, interval_end, sep = ":"  ),
@@ -576,11 +577,19 @@ if( analysis_type == "single_sample" ){
     colnames( C ) <- c("rank","breaks")
     C[,1] <- 1:nrow(C)
     C[,2] <- breakList
-    
-    
-    pdf( 
+
+    test_con <- tryCatch(file(output_name, open = "ab"), error = function(e) NULL)
+    if (is.null(test_con)) {
+      stop(sprintf(
+        "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
+        output_name
+      ))
+    }
+    close(test_con)
+
+    pdf(
       output_name,
-      width = 8.5, height = 11 
+      width = 8.5, height = 11
     )
     
     par(bg  = "#eeeeee")
@@ -598,6 +607,10 @@ if( analysis_type == "single_sample" ){
     
     w  <- calculate_w(100, 100, c(interval_start, interval_end), 
                       bin_size)
+    
+    if (w > 2 && bin_size >= 5000){cat(underplot_message)}
+    if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
+    if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
     
     top   <- 134
     scale <- 1
@@ -639,7 +652,7 @@ if( analysis_type == "single_sample" ){
         denMat1[x_index, y_index] <- sparMat1[i, "counts"]
       }
     }
-    
+   
     power_law_path <- list.files(
       sample_dir,
       pattern = paste0("inherentStats",".txt"),
@@ -718,7 +731,7 @@ if( analysis_type == "single_sample" ){
       cat("\n\nParameter --quant_cut is not applicable when inherent = TRUE.\nContinuing without --quant_cut...\n\n")
     }
     
-    
+
     colors_n       <- 10
     colors_0_1     <- colorRampPalette(c(inh_col_off , inh_col_on  ))( colors_n )
     colors_1_2     <- colorRampPalette(c(inh_col_on  , inh_col_ceil))( colors_n )
@@ -737,10 +750,19 @@ if( analysis_type == "single_sample" ){
     colnames( C ) <- c("rank","breaks")
     C[,1] <- 1:nrow(C)
     C[,2] <- breaks
-    
-    pdf( 
+
+    test_con <- tryCatch(file(output_name, open = "ab"), error = function(e) NULL)
+    if (is.null(test_con)) {
+      stop(sprintf(
+        "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
+        output_name
+      ))
+    }
+    close(test_con)
+
+    pdf(
       output_name,
-      width = 8.5, height = 11 
+      width = 8.5, height = 11
     )
     
     par(bg  = "#eeeeee")
@@ -779,11 +801,8 @@ if( analysis_type == "single_sample" ){
     invisible(dev.off())
     
   }
-  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
-  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
-  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
 }
-
+  
 
 
 
@@ -1007,12 +1026,21 @@ if( analysis_type == "two_sample" ){
   colnames( C ) <- c("rank","breaks")
   C[,1] <- 1:nrow(C)
   C[,2] <- breakList
-  
-  pdf( 
+
+  test_con <- tryCatch(file(output_name, open = "ab"), error = function(e) NULL)
+  if (is.null(test_con)) {
+    stop(sprintf(
+      "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
+      output_name
+    ))
+  }
+  close(test_con)
+
+  pdf(
     output_name,
-    width = 8.5, height = 11 
+    width = 8.5, height = 11
   )
-  
+
   par(omi = rep(0.5,4))
   par(mai = rep(0.5,4))
   par(bg  = "#eeeeee")
@@ -1027,6 +1055,10 @@ if( analysis_type == "two_sample" ){
   w  <- calculate_w(100, 100, c(interval_start, interval_end), 
                     bin_size)
   
+  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
+  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
+  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
+  
   top   <- 134
   scale <- 1
   
@@ -1037,12 +1069,8 @@ if( analysis_type == "two_sample" ){
   draw_scale( )
   
   top <- top - 20
-
-  draw_viewpoints( denDelta , C , left_side = 0, viewpoint_start, analysis_type, height)
   
-  if (w > 2 && bin_size >= 5000){cat(underplot_message)}
-  if (w < 0.26 && bin_size <= 5000){cat(overplot_message_1)}
-  if (w < 0.26 && bin_size > 5000){cat(overplot_message_2)}
+  draw_viewpoints( denDelta , C , left_side = 0, viewpoint_start, analysis_type, height)
   
   invisible(dev.off())
 }
