@@ -18,7 +18,7 @@ function help {
     echo 
     echo "Create APA plot with CPM/AQuA/inherent normalized contact values"
     echo
-    echo "Multiple samples can be passed to -A or -B to average as a cohort, e.g. --sample1 s1 s2 s3"
+    echo "Multiple samples can be passed to -A/-B (or -H/-I for local dirs) to average as a cohort, e.g. --sample1 s1 s2 s3"
     echo
     echo "---------------"
     echo "OPTIONS"
@@ -36,8 +36,8 @@ function help {
     echo " [     --loop_norm           ]  : If TRUE, normalizes APA values by loop count in bedpe. Default FALSE if --inherent FALSE, else TRUE"
     echo " [  -s|--scores              ]  : If TRUE, plots peak value and ratios of peak:corner means. Default TRUE"
     echo " [  -i|--inherent            ]  : If TRUE, normalize contacts using inherent normalization. Default FALSE"
-    echo " [     --sample1_dir         ]  : If not using the tinkerbox, specify the full path to the directory containing sample data"
-    echo " [     --sample2_dir         ]  : If not using the tinkerbox, full path to the second sample directory"
+    echo " [     --sample1_dir         ]  : If not using the tinkerbox, specify the full path to the directory containing sample data. Accepts multiple paths for a cohort."
+    echo " [     --sample2_dir         ]  : If not using the tinkerbox, full path to the second sample directory. Accepts multiple paths for a cohort."
     echo " [  -h|--help                ]   Help message"
     exit;
 }
@@ -82,8 +82,8 @@ e="no_cap"
 l="blank"
 s=TRUE
 i=FALSE
-H=blank
-I=blank
+LOCAL_DIRS_1=()
+LOCAL_DIRS_2=()
 
 while getopts ":P:A:G:O:B:Q:r:c:e:d:l:s:i:H:I:h" OPT
 do
@@ -115,8 +115,20 @@ do
   e) e=$OPTARG;;
   s) s=$OPTARG;;
   i) i=$OPTARG;;
-  H) H=$OPTARG;;
-  I) I=$OPTARG;;
+  H)
+    LOCAL_DIRS_1+=("$OPTARG")
+    while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
+        LOCAL_DIRS_1+=("${!OPTIND}")
+        ((OPTIND++))
+    done
+    ;;
+  I)
+    LOCAL_DIRS_2+=("$OPTARG")
+    while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
+        LOCAL_DIRS_2+=("${!OPTIND}")
+        ((OPTIND++))
+    done
+    ;;
   h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -173,13 +185,13 @@ fi
 
 #----------------------------------
 
-if [ ${#COHORT_SAMPLES_1[@]} -eq 0 ] && [ "$H" == "blank" ];
+if [ ${#COHORT_SAMPLES_1[@]} -eq 0 ] && [ ${#LOCAL_DIRS_1[@]} -eq 0 ];
 then
     usage
     exit
 fi
 
-if [ ${#COHORT_SAMPLES_1[@]} -gt 0 ] && [ "$H" != "blank" ]; then
+if [ ${#COHORT_SAMPLES_1[@]} -gt 0 ] && [ ${#LOCAL_DIRS_1[@]} -gt 0 ]; then
     echo "Need either sample1 name or sample1 directory path, not both. Exiting."
     usage
     exit 1
@@ -244,13 +256,15 @@ hic_paths_A=()
 stat_paths_A=()
 version_dirs_A=()
 
-if [ "$H" != "blank" ]; then
+if [ ${#LOCAL_DIRS_1[@]} -gt 0 ]; then
     # Using --sample1_dir
-    validate_samples_and_stats "$H" "sample1"
-    local_name=$(basename "$H")
-    version_dirs_A+=("$local_name")
-    hic_paths_A+=("$H/${local_name}.hic")
-    stat_paths_A+=("$H/${local_name}.mergeStats.txt")
+    for sample_dir in "${LOCAL_DIRS_1[@]}"; do
+        validate_samples_and_stats "$sample_dir" "sample1"
+        local_name=$(basename "$sample_dir")
+        version_dirs_A+=("$local_name")
+        hic_paths_A+=("$sample_dir/${local_name}.hic")
+        stat_paths_A+=("$sample_dir/${local_name}.mergeStats.txt")
+    done
 else
     for sample_name in "${COHORT_SAMPLES_1[@]}"; do
         sample_dir=$(get_sample_directory "$sample_name")
@@ -266,17 +280,19 @@ else
 fi
 
 # Same for cohort B if present
-if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ "$I" != "blank" ]; then
+if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ ${#LOCAL_DIRS_2[@]} -gt 0 ]; then
     hic_paths_B=()
     stat_paths_B=()
     version_dirs_B=()
-    if [ "$I" != "blank" ]; then
+    if [ ${#LOCAL_DIRS_2[@]} -gt 0 ]; then
         # Using --sample2_dir
-        validate_samples_and_stats "$I" "sample2"
-        local_name=$(basename "$I")
-        version_dirs_B+=("$local_name")
-        hic_paths_B+=("$I/${local_name}.hic")
-        stat_paths_B+=("$I/${local_name}.mergeStats.txt")
+        for sample_dir in "${LOCAL_DIRS_2[@]}"; do
+            validate_samples_and_stats "$sample_dir" "sample2"
+            local_name=$(basename "$sample_dir")
+            version_dirs_B+=("$local_name")
+            hic_paths_B+=("$sample_dir/${local_name}.hic")
+            stat_paths_B+=("$sample_dir/${local_name}.mergeStats.txt")
+        done
     else
         for sample_name in "${COHORT_SAMPLES_2[@]}"; do
             sample_dir=$(get_sample_directory "$sample_name")
@@ -384,7 +400,7 @@ else
     label_A="${version_dirs_A[0]}_cohort"
 fi
 
-if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ "$I" != "blank" ]; then
+if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ ${#LOCAL_DIRS_2[@]} -gt 0 ]; then
     if [ ${#version_dirs_B[@]} -eq 1 ]; then
         label_B="${version_dirs_B[0]}"
     else
@@ -394,7 +410,7 @@ fi
 
 if [[ -z $O ]]; then
     random_num=$RANDOM
-    if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ "$I" != "blank" ]; then
+    if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ ${#LOCAL_DIRS_2[@]} -gt 0 ]; then
         O="${label_A}_v_${label_B}_APA_${random_num}"
     else
         O="${label_A}_APA_${random_num}"
@@ -530,7 +546,7 @@ join_array() { local IFS=","; echo "$*"; }
 ###########################################################################
 ###########################################################################
 
-if [ ${#COHORT_SAMPLES_2[@]} -eq 0 ] && [ "$I" == "blank" ]
+if [ ${#COHORT_SAMPLES_2[@]} -eq 0 ] && [ ${#LOCAL_DIRS_2[@]} -eq 0 ]
 then 
 
     #----------------------------------
@@ -563,7 +579,8 @@ then
     stat_str_A=$(join_array "${stat_paths_A[@]}")
     label_str_A=$(join_array "${version_dirs_A[@]}")
 
-    Rscript $aqua_dir/plot_APA.r \
+    #Rscript $aqua_dir/plot_APA.r \
+    Rscript /mnt/c/Users/laura/Axiotl/aqua-tools/plot_APA.r \
       "${hic_str_A}" \
       "${label_str_A}" \
       "${c}" \
@@ -597,7 +614,7 @@ fi
 ###########################################################################
 
 
-if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ "$I" != "blank" ]
+if [ ${#COHORT_SAMPLES_2[@]} -gt 0 ] || [ ${#LOCAL_DIRS_2[@]} -gt 0 ]
 then
 
     num_loops=$(wc -l < "$P")
@@ -633,7 +650,8 @@ then
 
     #----------------------------------
 
-    Rscript $aqua_dir/plot_APA.r \
+    #Rscript $aqua_dir/plot_APA.r \
+    Rscript /mnt/c/Users/laura/Axiotl/aqua-tools/plot_APA.r \
       "${hic_str_A}" \
       "${hic_str_B}" \
       "${label_str_A}" "${label_str_B}" \
