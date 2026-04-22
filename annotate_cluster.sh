@@ -1,7 +1,7 @@
 #!/bin/bash 
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 ref_dir=$data_dir/hg38/reference
 
 temp_dir=$(mktemp -d /tmp/annotate_cluster-XXXXXXXXXX)
@@ -197,7 +197,7 @@ clusters=$(cut -f 7 $P | sort -V | uniq)
 
 header="Cluster\tchr\tstart\tend\tDegree\tTotal_sum\tRange_span\tBin_span\tPeak_span\t\
 Num_bed-B_peaks\tNum_Alternate_TSSs\tNum_lncRNA\tNum_Housekeeping_Genes\tNum_All_Genes(protein_coding)\tNum_ENCODE-3_Enh\tNum_ENCODE-3_CTCF\tNum_UCSC_CpG\t\
-LncRNAs\tHousekeeping_Genes\tAll_Genes(protein_coding)"
+LncRNAs\tHousekeeping_Genes\tAll_Genes(protein_coding)\tNum_Enh-Enh_loops\tNum_Enh-Pro_loops\tNum_Pro-Pro_loops"
 
 
 for user_bed in "${USER_BED_FILES[@]}"; do
@@ -235,7 +235,7 @@ for cluster in $clusters; do
     total_count=$(awk '{sum += $8} END {print sum}' $temp_dir/"${cluster}_subset_C-annotated.bedpe")
 
 
-    # 4. summarise_interval
+    # 4. summarise_interval (requires summarize_interval.sh, not available in public repo)
     #echo -e "$chr\t$start\t$end" > $temp_dir/"${cluster}_subset_range.bed"
     #
     #$aqua_dir/summarize_interval.sh \
@@ -398,9 +398,39 @@ for cluster in $clusters; do
 
 
 
+    #9. Loop breakdown
+    E_E=0
+    E_P=0
+    P_P=0
+
+    $aqua_dir/intersect_bedpe.sh \
+     --bedpe $temp_dir/"${cluster}_subset.bedpe" \
+     --bed_A $temp_dir/sample_tss.bed \
+     --bed_B $temp_dir/sample_enh.bed > $temp_dir/"${cluster}_subset-intersect.bedpe"
+
+    awk 'BEGIN {OFS="\t"} {print $1, $2, $3, $4, $5, $6, $NF}' $temp_dir/"${cluster}_subset-intersect.bedpe" | \
+    sort | uniq | \
+    cut -f 7 | \
+    sort | uniq -c > $temp_dir/"${cluster}_loop-breakdown.txt"
+
+    while read -r count pair; do
+        case $pair in
+            "B-B")
+                E_E=$((E_E + count))
+                ;;
+            "A-B"|"B-A")
+                E_P=$((E_P + count))
+                ;;
+            "A-A")
+                P_P=$((P_P + count))
+                ;;
+        esac
+    done < <(awk '{print $1, $2}' $temp_dir/"${cluster}_loop-breakdown.txt")
+
+
     output="${cluster}\t${chr}\t${start}\t${end}\t${degree}\t${total_count}\t${range_span}\t${bin_span}\t${peak_span}\t"\
 "${num_peaks}\t${num_TSS}\t${num_lncRNA}\t${num_housekeeping_genes}\t${num_genes}\t${num_enhs}\t${num_CTCF}\t${num_CpGs}\t"\
-"${lncRNAs}\t${housekeeping_genes}\t${genes}"
+"${lncRNAs}\t${housekeeping_genes}\t${genes}\t${E_E}\t${E_P}\t${P_P}"
 
 
     for user_bed in "${USER_BED_FILES[@]}"; do

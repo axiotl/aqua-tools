@@ -1,16 +1,7 @@
 #!/bin/bash
 
-data_dir=$HOME/lab-data
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
 sample_sheet="$HOME/setup/sample_sheet.txt"
-
-# Ensure the sample sheet exists
-#if [ ! -f "$sample_sheet" ]; then
-#    python3 /home/ubuntu/aqua_tools/restore_sample_sheet.py > /dev/null 2>&1
-#    if [ ! -f "$sample_sheet" ]; then
-#        echo "Failed to restore sample sheet. Exiting."
-#        exit 1
-#    fi
-#fi
 
 function usage {
     echo "usage : get_stats.sh --sample SAMPLE_NAME --genome GENOME"

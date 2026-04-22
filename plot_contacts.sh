@@ -5,16 +5,14 @@ norm_method=NONE
 unit=BP
 aqua_genome=mm10
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 if [[ -z "${SAMPLE_SHEET}" ]]; then
-    sample_sheet="$HOME/setup/sample_sheet.txt"    
+    sample_sheet="$HOME/setup/sample_sheet.txt"
 else
     sample_sheet="${SAMPLE_SHEET}"
 fi
-
-juicer_tools='java -jar $HOME/juicer_tools_1.19.02.jar'
 
 function usage {
     echo -e "usage : plot_contacts.sh -A NAME_OF_FIRST_SAMPLE -R RANGE -G GENOME_BUILD [-h]"
@@ -31,20 +29,20 @@ function help {
     echo "    -A|--sample1                         : Name of the sample as it appears on the Tinkerbox"
     echo "    -R|--range                           : Genomic range to plot in chr:start:end or interchromosomal chr1:start1:end1-chr2:start2:end2 format" 
     echo "    -G|--genome                          : The genome build the sample(s) has been processed using: hg19, hg38, or mm10"
-    echo " [  -O|--output_name                 ]   : Optional name for the plot"
+    echo " [  -O|--output_name                 ]   : Name for the plot or matrix output"
     echo " [  -B|--sample2                     ]   : For two sample delta plots, name of the second sample"
     echo " [  -Q|--norm                        ]   : Which normalization to use: none, cpm, or aqua in lower case"
     echo " [  -r|--resolution                  ]   : Resolution of sample in basepairs. Default 5000"
     echo " [  -o|--color_one_sample            ]   : Color for single sample plots in RGB hexadecimal. Default FF0000"
     echo " [  -t|--color_two_sample            ]   : Color for delta plots in RGB hexadecimal separated by '-'; 1E90FF-C71585"
-    echo " [     --annotations_default         ]   : Draw bed TSS annotations. Default TRUE"
+    echo " [     --annotations_default         ]   : Annotation style options: standard, axiotl, or none. Default standard"
     echo " [     --annotations_custom          ]   : Path to bed file(s) for custom annotations; --annotations_custom 1.bed 2.bed"
     echo " [     --annotations_custom_color    ]   : Color for supplied bed in RGB hexadecimal; C71585 1E90FF for two bed files"
     echo " [     --quant_cut                   ]   : Cap matrix values at a given percentile (0.00-1.00). Default 1.00"
     echo " [     --max_cap                     ]   : Cap matrix values by adjusting the maximum value, modifying color intensity"
     echo " [     --get_matrix                  ]   : Obtain raw contact matrices instead of contact plot. Default FALSE"
-    echo " [  -P|--bedpe                       ]   : Path to a bedpe file to highlight tiles of interacting bedpe feet"
-    echo " [     --bedpe_color                 ]   : Color for supplied bedpe in RGB hexadecimal; C71585"
+    echo " [  -P|--bedpe                       ]   : Path to bedpe file(s) to highlight tiles of interacting bedpe feet; --bedpe 1.bedpe 2.bedpe"
+    echo " [     --bedpe_color                 ]   : Color for supplied bedpe(s) in RGB hexadecimal; C71585 1E90FF"
     echo " [  -i|--inherent                    ]   : If TRUE, normalize contacts using inherent normalization. Default FALSE"
     echo " [     --inh_col_floor               ]   : Contact color for inherent values < 0, in RGB hexadecimal. Default FFFFFF"
     echo " [     --inh_col_off                 ]   : Contact color for inherent values ~ 0, in RGB hexadecimal. Default D4E4FB"
@@ -53,6 +51,7 @@ function help {
     echo " [  -w|--width                       ]   : Manually set width of printed bin between 0-1. Default calculated automatically"
     echo " [  -g|--gene                        ]   : Provide a gene name instead of an interval range; --gene sox8 or pax3,foxo1"
     echo " [  -f|--flank                       ]   : Change interval range by flank value in bp; --flank 5000"
+    echo " [  -s|--expand_viewport             ]   : Expand the plot view to include rectangular viewport. Default TRUE"
     echo " [  -h|--help                        ]   : Help message"
     exit;
 }
@@ -99,16 +98,17 @@ for arg in "$@"; do
       "--width")                        set -- "$@" "-w" ;;
       "--gene")                         set -- "$@" "-g" ;;
       "--flank")                        set -- "$@" "-f" ;;
+      "--svg")                          set -- "$@" "-v" ;;
+      "--expand_viewport")              set -- "$@" "-s" ;;
       "--help")                         set -- "$@" "-h" ;;
       *)                                set -- "$@" "$arg"
   esac
 done
 
-
 Q="blank"
 r=5000
 p=FALSE
-d=TRUE
+d="standard"
 x=NONE
 c=NONE
 q=1
@@ -123,12 +123,14 @@ L=d4e4fb
 M=ff0000
 N=ff8d4a
 T=FALSE
-f=0 
+f=0
+v=FALSE
+s=TRUE
 
 prefix="_"
 
 # Process all arguments
-while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:P:y:i:K:L:M:N:w:g:T:f:h" OPT
+while getopts ":A:R:G:O:B:Q:r:p:o:t:d:x:c:q:m:D:P:y:i:K:L:M:N:w:g:T:f:v:s:h" OPT
 do
   case $OPT in
     A) A=$OPTARG;;
@@ -143,7 +145,7 @@ do
     t) t=$OPTARG;;
     d) d=$OPTARG;;
     x) 
-        # Accept two bed annotation files
+        # Accept multiple bed annotation files
         ANNOTATION_FILES+=("$OPTARG")
         while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
             ANNOTATION_FILES+=("${!OPTIND}")
@@ -151,7 +153,7 @@ do
         done
         ;;
     c)
-        # Accept two bed annotation colors
+        # Accept multiple bed annotation colors
         ANNOTATION_COLORS+=("$OPTARG")
         while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
             ANNOTATION_COLORS+=("${!OPTIND}")
@@ -161,8 +163,22 @@ do
     q) q=$OPTARG;;
     m) m=$OPTARG;;
     D) D=$OPTARG;;
-    P) P=$OPTARG;;
-    y) y=$OPTARG;;
+    P) 
+        # Accept multiple bedpe files
+        BEDPE_FILES+=("$OPTARG")
+        while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
+            BEDPE_FILES+=("${!OPTIND}")
+            ((OPTIND++))
+        done
+        ;;
+    y) 
+        # Accept multiple bedpe colors
+        BEDPE_COLORS+=("$OPTARG")
+        while [[ $OPTIND -le $# && ! "${!OPTIND}" =~ ^- ]]; do
+            BEDPE_COLORS+=("${!OPTIND}")
+            ((OPTIND++))
+        done
+        ;;
     i) i=$OPTARG;;
     K) K=$OPTARG;;
     L) L=$OPTARG;;
@@ -172,6 +188,8 @@ do
     g) g=$OPTARG;;
     T) T=$OPTARG;;
     f) f=$OPTARG;;
+    s) s=$OPTARG;;
+    v) v=$OPTARG;;
     h) help ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -179,55 +197,20 @@ do
       exit 1
       ;;
   :)
-      echo "Option -$OPTARG requires an argument." >&2
-      usage
-      exit 1
-      ;;
+    case "$OPTARG" in
+      i) echo -e "\n--inherent requires a value of TRUE or FALSE (--inherent TRUE)\n" ;;
+      D) echo -e "\n--get_matrix requires a value of TRUE or FALSE (--get_matrix TRUE)\n" ;;
+      s) echo -e "\n--expand_viewport requires a value of TRUE or FALSE (--expand_viewport TRUE)\n" ;;
+      v) echo -e "\n--svg requires a value of TRUE or FALSE (--svg TRUE)\n" ;;
+      *) echo -e "\nOption -$OPTARG requires an argument.\n" ;;
+    esac
+    usage
+    exit 1
+    ;;
   esac
 done
 
 echo
-# Filter annotation files: remove files that don't exist or don't have at least 3 tab-separated columns
-VALID_ANNOTATION_FILES=()
-for file in "${ANNOTATION_FILES[@]}"; do
-  if [ ! -f "$file" ]; then
-    echo -e "Annotation file '$file' does not exist. It will be skipped." >&2
-    continue
-  fi
-
-  # Check the first few lines to see if they have at least 3 columns and are tab or space separated
-  if ! head -n 5 "$file" | awk -F'[ \t]+' '{ if (NF < 3) { exit 1 } }'; then
-    echo -e "Annotation file '$file' does not have at least 3 tab or space separated columns. It will be skipped." >&2
-    continue
-  fi
-
-  VALID_ANNOTATION_FILES+=("$file")
-done
-
-# Replace the original array with the valid files only
-ANNOTATION_FILES=("${VALID_ANNOTATION_FILES[@]}")
-
-# Set custom annotation files and colors or return to default
-if [ ${#ANNOTATION_FILES[@]} -eq 0 ]; then
-    x="NONE"
-else
-    x="${ANNOTATION_FILES[*]}"
-fi
-
-if [ ${#ANNOTATION_COLORS[@]} -eq 0 ]; then
-    c="NONE"
-else
-    c="${ANNOTATION_COLORS[*]}"
-fi
-
-#----------------------------------
-
-# If no sample B, the variable is empty:
-if [ -z "$B" ]; then
-  case $B in
-  B) B="";;
-  esac
-fi
 
 #----------------------------------
 
@@ -291,6 +274,28 @@ else
 fi
 
 #----------------------------------
+
+# check for missing true/false flags
+validate_bool_param() {
+    local name="$1"
+    local value="$2"
+    if [[ -z "$value" || "$value" == -* ]]; then
+        echo -e "\n--${name} requires a value of TRUE or FALSE (--${name} TRUE)\n"
+        exit 1
+    fi
+    if [[ "$value" != "TRUE" && "$value" != "FALSE" ]]; then
+        echo -e "\n--${name} must be TRUE or FALSE. Got: '$value'\n"
+        exit 1
+    fi
+}
+
+validate_bool_param "inherent" "$i"
+validate_bool_param "get_matrix" "$D"
+validate_bool_param "expand_viewport" "$s"
+validate_bool_param "svg" "$v"
+
+#----------------------------------
+
 case "$r" in
   1000|5000|10000|25000|50000|100000|250000|500000|1000000|2500000)
     # Value is accepted
@@ -303,6 +308,7 @@ esac
 
 #----------------------------------
 # check for multiple normalization methods 
+
 if [[ "$Q" != "blank" && "$i" != "FALSE" ]]; then
   echo -e "\nInherent normalization is not compatible with other --norm methods. Continuing with --inherent TRUE ..."
   Q="blank"
@@ -310,8 +316,8 @@ if [[ "$Q" != "blank" && "$i" != "FALSE" ]]; then
 fi
 
 #----------------------------------
-
 # Check if both -R and -g are provided
+
 if [[ -n $R && -n $g ]]; then
     echo -e "\nOptions -R and --gene cannot be used together. Please provide only one of them.\n"
     usage  
@@ -376,15 +382,19 @@ if [[ ! -z $g ]]; then
             echo "Gene '$g' not found in '$bed_tss'." >&2
             exit 1
         fi
-        expanded_coordinates=$(echo "$gene_coordinates" | awk -v OFS="\t" '{print $1, $2-500000, $3+500000}' | tr '[:blank:]' ':')
+        if [[ $r == 1000 ]]; then
+            expanded_coordinates=$(echo "$gene_coordinates" | awk -v OFS="\t" '{print $1, $2-250000, $3+250000}' | tr '[:blank:]' ':')
+        else
+            expanded_coordinates=$(echo "$gene_coordinates" | awk -v OFS="\t" '{print $1, $2-500000, $3+500000}' | tr '[:blank:]' ':')
+        fi
         R="$expanded_coordinates"
         
     fi
 fi
 
+#----------------------------------
 
-
-# Function to extract chromosome number for ordering later 
+# Extract chromosome number for ordering later 
 extract_chr_number() {
     echo "$1" | sed -e 's/chr\([0-9XY]*\).*/\1/'
 }
@@ -421,7 +431,7 @@ elif [[ $R =~ $inter_format ]]; then
         echo -e "\nInherent normalization is not compatible with interchromosomal ranges.\n"
         exit 1
     fi
-
+    
     # Split the input into two parts for interchromosomal range
     IFS='-' read -ra ADDR <<< "$R"
     chr1=${ADDR[0]}
@@ -439,6 +449,12 @@ elif [[ $R =~ $inter_format ]]; then
     orig_chr1="chr${num_chr1}"
     orig_chr2="chr${num_chr2}"
 
+    if [[ "$v" == "TRUE" ]]; then
+        echo -e "\nSVG output is not yet supported for interchromosomal plots. Using PDF instead...\n"
+        v=FALSE
+    fi
+
+
 # Check if input is a likely attempt at interchromosomal format
 elif [[ $R =~ $likely_attempt ]]; then
     echo -e "\nThe range format for interchromosomal input seems incorrect. Please ensure it follows the chr1:start1:end1-chr2:start2:end2 format with no extra spaces or misplaced characters.\n"
@@ -450,8 +466,10 @@ else
     exit 1
 fi
 
-bin_size=$r
 
+#----------------------------------
+
+bin_size=$r
 
 adjust_coordinates() {
     local coordinate=$1
@@ -494,69 +512,181 @@ done
 R=$(IFS='-'; echo "${adjusted_ranges[*]}")
 
 
+#----------------------------------
 
-# Generate output name if not provided
-if [[ -z $O ]]; then
-  IFS=":" read -ra RANGE_ARRAY <<< "$R"
-  interval_chr="${RANGE_ARRAY[0]}"
-  interval_start="${RANGE_ARRAY[1]}"
-  interval_end="${RANGE_ARRAY[2]}"
-  O="${interval_chr}_${interval_start}_${interval_end}.pdf"
+# Output name / extension checks
+if [ "$D" == TRUE ]; then
+  # Matrix mode: write a .txt file, ignore --svg
+  ext="txt"
 else
-  # Add .pdf if it's missing
-  if [[ $O != *.pdf ]]; then
-    O="${O}.pdf"
+  case "$v" in
+    TRUE)  ext="svg" ;;
+    FALSE) ext="pdf" ;;
+    *)     echo "--svg must be TRUE or FALSE (got '$v')." >&2; exit 1 ;;
+  esac
+fi
+
+
+#----------------------------------
+
+# Check and process multiple annotation and bedpe files/colors
+# Filter annotation files: remove files that don't exist or don't have at least 3 tab-separated columns
+VALID_ANNOTATION_FILES=()
+for file in "${ANNOTATION_FILES[@]}"; do
+  if [ ! -f "$file" ]; then
+    echo -e "Annotation file '$file' does not exist. It will be skipped.\n" >&2
+    continue
   fi
-fi
 
+  # Check the first few lines to see if they have at least 3 columns and are tab or space separated
+  if ! head -n 5 "$file" | awk -F'[ \t]+' '{ if (NF < 3) { exit 1 } }'; then
+    echo -e "Annotation file '$file' does not have at least 3 tab or space separated columns. It will be skipped.\n" >&2
+    continue
+  fi
 
+  VALID_ANNOTATION_FILES+=("$file")
+done
 
-# Check bedpe
-if [ "$P" = "FALSE" ]; then
-    echo -e "No BEDPE file supplied to highlight contact plot\n"
+# Replace the original array with the valid files only
+ANNOTATION_FILES=("${VALID_ANNOTATION_FILES[@]}")
+
+# Set custom annotation files and colors or return to default
+if [ ${#ANNOTATION_FILES[@]} -eq 0 ]; then
+    x="NONE"
 else
-    # Check if file exists
-    if [ ! -f "$P" ]; then
-        echo "BEDPE file $P does not exist. It will be skipped."
-        echo
-        P="FALSE"
-    else
-    # Check number of columns and coordinate ordering
-        awk_output=$(awk '
-        BEGIN {FS="\t"; errors=0; reversed=0}
-        NF < 6 {
-            print "BEDPE error: Line " NR " has fewer than 6 columns"
-            errors++
-        }
-        $3 < $2 || $6 < $5 {
-            print "BEDPE error: Reversed feet in line " NR
-            reversed++
-        }
-        END {
-            if (errors > 0) {
-                print "BEDPE error: file should contain at least 6 columns in all rows."
-                exit 1
-            }
-            if (reversed > 0) {
-                print "Please ensure that column 3 > column 2 and column 6 > column 5 for all entries."
-                exit 1
-            }
-            exit 0
-        }' "$P")
-        
-        # Check the exit status of awk
-        if [ $? -ne 0 ]; then
-            echo "$awk_output"
-            echo "Continuing without --bedpe $P ..."
-            echo
-            P="FALSE"
-        fi
-    fi
+    x="${ANNOTATION_FILES[*]}"
 fi
+
+if [ ${#ANNOTATION_COLORS[@]} -eq 0 ]; then
+    c="NONE"
+else
+    c="${ANNOTATION_COLORS[*]}"
+fi
+
+#----------------------------------
+# Bedpe file checks
+
+VALIDATED_BEDPE_FILES=()
+for file in "${BEDPE_FILES[@]}"; do
+  if [[ ! -f "$file" ]]; then
+    echo -e "Bedpe file '$file' does not exist. It will be skipped.\n" >&2
+    continue
+  fi
+
+  awk_output=$(
+    awk -F'[ \t]+' '
+      BEGIN { code=0; violations=0 }
+      { sub(/\r$/, "", $0) }                   # strip CR (Windows endings)
+      /^[[:space:]]*$/ { next }                # ignore blank lines
+
+      NF < 6 {
+        printf "BEDPE error: line %d has fewer than 6 columns\n", NR
+        violations=1; next
+      }
+
+      # Header: if column 2 is not an integer, treat as header (fatal)
+      $2 !~ /^[0-9]+$/ {
+        printf "BEDPE error: headers are not allowed (line %d)\n", NR
+        code=1; next
+      }
+
+      # Other coordinate columns must be integers
+      ($3 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) {
+        printf "BEDPE error: non-integer coordinates at line %d\n", NR
+        violations=1; next
+      }
+
+      # Feet must be ordered 
+      ($3 <= $2 || $6 <= $5) {
+        printf "BEDPE error: reversed/zero-length foot at line %d (require col3>col2 and col6>col5)\n", NR
+        violations=1; next
+      }
+
+      END {
+        if (code)       exit code   # 1 = header found (exit)
+        if (violations) exit 2      # 2 = validation issues (skip)
+        exit 0                      # 0 = OK
+      }
+    ' "$file"
+  )
+  status=$?
+
+  if (( status == 1 )); then
+    echo "$awk_output" >&2
+    echo "Fix '$file' and retry." >&2
+    exit 1
+  elif (( status == 2 )); then
+    echo "$awk_output" >&2
+    echo "Continuing without --bedpe $file ..." >&2
+    echo
+    continue
+  fi
+
+  VALIDATED_BEDPE_FILES+=("$file")
+done
+
+
+# Keep only fully validated files
+BEDPE_FILES=("${VALIDATED_BEDPE_FILES[@]}")
+
+if [ ${#BEDPE_FILES[@]} -eq 0 ]; then
+  P=FALSE
+else
+  P="${BEDPE_FILES[*]}"
+fi
+
+if [ ${#BEDPE_COLORS[@]} -eq 0 ]; then
+  y=000000
+else
+  y="${BEDPE_COLORS[*]}"
+fi
+
+#----------------------------------
+# Prepare output directory 
+
+prepare_output_target() {
+  local requested="$1"
+
+  # Expand leading ~ 
+  if [[ "$requested" == "~/"* ]]; then
+    requested="$HOME/${requested:2}"
+  elif [[ "$requested" == "~" ]]; then
+    requested="$HOME"
+  fi
+
+  local dirpart namepart
+  dirpart="$(dirname "$requested")"
+  namepart="$(basename "$requested")"
+
+  # If user didn't include a path, write to current working directory
+  if [[ "$requested" != */* || "$dirpart" == "." ]]; then
+    out_dir="$PWD"
+    O="$namepart"
+  else
+    # If path is relative, anchor it to current working directory
+    if [[ "$dirpart" == /* ]]; then
+      out_dir="$dirpart"
+    else
+      out_dir="$PWD/$dirpart"
+    fi
+    O="$namepart"
+  fi
+
+  # Create output directory if needed
+  if [[ ! -d "$out_dir" ]]; then
+    mkdir -p "$out_dir" || {
+      echo -e "\nError: Failed to create output directory: $out_dir\n" >&2
+      exit 1
+    }
+  fi
+}
+
+#----------------------------------
+
 
 if [[ "$p" == "TRUE" ]]; then
   echo -e "--profiles has been deprecated. Contact Axiotl if needed. Continuing...\n"
-  p=FALSE  # Ensure it remains FALSE
+  p=FALSE 
 fi
 
 if [[ "$m" != "none" && "$q" != "1" ]]; then
@@ -569,6 +699,10 @@ if [[ "$Q" != "blank" && "$Q" != "none" && "$Q" != "cpm" && "$Q" != "aqua" ]]; t
   exit 1
 fi
 
+if [[ "$d" != "standard" && "$d" != "axiotl" && "$d" != "none" ]]; then
+  echo -e "\n--annotations_default should strictly be standard, axiotl, or none. Got $d\n"
+  exit 1
+fi
 
 ###########################################################################
 ###########################################################################
@@ -584,10 +718,7 @@ then
 
   analysis_type="single_sample"
 
-  echo "Commencing $analysis_type analysis"
-
-  #----------------------------------
-
+  # Validate contact color
   if [[ -z $o ]]; then
     # Set default color based on the value of 'inter'
     if [ "$T" = "TRUE" ]; then
@@ -595,16 +726,24 @@ then
     else
         o="FF0000"
     fi
-fi
+  fi
+
+  if ! [[ "$o" =~ ^[0-9A-Fa-f]{6}$ ]]; then
+    echo -e "\n--color_one_sample must be exactly 6 hex digits (e.g. FF0000). Got: $o\n"
+    usage
+    exit 1
+  fi
 
   if [[ -n $t ]]; 
   then 
     echo -e "\nOops! Looks like you provided the wrong parameter for contact color!\n"
+    echo -e "Use --color_one_sample for single sample analyses\n"
     usage
-    exit
+    exit 1
   fi
 
   #----------------------------------
+  echo "Commencing $analysis_type analysis"
 
   echo "resolution: $r"
 
@@ -638,6 +777,23 @@ fi
   sample_dir=$data_dir/$G/$A
   out_dir=`pwd`
 
+  # Build output name
+  if [[ -z "${O:-}" ]]; then
+    IFS=":" read -r interval_chr interval_start interval_end <<< "$R"
+    O="${base_dir_A}_${range_text}.${ext}"
+  else
+    case "$O" in
+      *.pdf|*.PDF|*.svg|*.SVG|*.txt|*.TXT)
+        O="${O%.*}.${ext}"
+        ;;
+      *)
+        O="${O}.${ext}"
+        ;;
+    esac
+  fi
+
+  prepare_output_target "$O"
+
   # Build argument list
   args=(
   "$analysis_type"
@@ -650,27 +806,18 @@ fi
   "$G" "$p" "$o" "$d" "$x" "$c"
   "$m" "$Q" "$q" "$O" "$P" "$y" "$i"
   "$sample_dir"
-  "$w" "$K" "$L" "$M" "$N" "$D"
+  "$w" "$K" "$L" "$M" "$N" "$D" "$v" "$s"
   )
 
-  # Keep user supplied inter chr order
+# Keep user supplied inter chr order
   if [[ $T == "TRUE" ]]; then
     args+=("$orig_chr1" "$orig_chr2")
   fi
 
-  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}"
-  exit_status=$?
-
-  if [ "$D" == FALSE ]; then
-    if [ $exit_status -eq 0 ] && [ -f "$O" ]; then
-        echo -e "\nDone! Created $O \n"
-    fi
-  fi
+  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}" 2>&1 | grep -v "Fontconfig warning"
+  exit_status=${PIPESTATUS[0]}
 
 fi
-
-
-
 
 
 ###########################################################################
@@ -704,8 +851,6 @@ then
 
   analysis_type="two_sample"
 
-  echo "Commencing $analysis_type analysis"
-
   #----------------------------------
   
 
@@ -717,15 +862,24 @@ then
     fi
   fi
 
+  # Validate two-sample color format: RRGGBB-RRGGBB
+  if ! [[ $t =~ ^[0-9A-Fa-f]{6}-[0-9A-Fa-f]{6}$ ]]; then
+    echo -e "\n--color_two_sample (-t) must be two 6-digit hex colors separated by '-'."
+    echo -e "For example: 1E90FF-C71585. Got: $t\n"
+    usage
+    exit 1
+  fi
 
   if [[ -n $o ]]; 
   then 
     echo -e "\nOops! Looks like you provided the wrong parameter for contact color!\n"
+    echo -e "Use --color_two_sample for two sample analyses\n"
     usage
     exit
   fi
 
   #----------------------------------
+  echo "Commencing $analysis_type analysis"
 
   echo "resolution: $r"
 
@@ -763,6 +917,23 @@ then
   sample_dirA=$data_dir/$G/$A
   sample_dirB=$data_dir/$G/$B
 
+  # Build output name
+  if [[ -z "${O:-}" ]]; then
+    IFS=":" read -r interval_chr interval_start interval_end <<< "$R"
+    O="${base_dir_A}_${base_dir_B}_${range_text}.${ext}"
+  else
+    case "$O" in
+      *.pdf|*.PDF|*.svg|*.SVG|*.txt|*.TXT)
+        O="${O%.*}.${ext}"
+        ;;
+      *)
+        O="${O}.${ext}"
+        ;;
+    esac
+  fi
+
+  prepare_output_target "$O"
+
   # Build argument list
   args=(
     "$analysis_type"
@@ -775,7 +946,7 @@ then
     "$G" "$p" "$t" "$d" "$x" "$c"
     "$m" "$Q" "$q" "$O" "$P" "$y" "$w"
     "$sample_dirA" "$sample_dirB"
-    "$D" "$K" "$L" "$M" "$N" "$i"
+    "$D" "$K" "$L" "$M" "$N" "$i" "$v" "$s"
     )
 
   # Keep user supplied inter chr order
@@ -783,14 +954,16 @@ then
     args+=("$orig_chr1" "$orig_chr2")
   fi
 
-  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}"
-  exit_status=$?
-
-  # Successful message
-  if [ "$D" == FALSE ]; then
-    if [ $exit_status -eq 0 ] && [ -f "$O" ]; then
-        echo -e "\nDone! Created $O \n"
-    fi
-  fi
+  Rscript "$aqua_dir/plot_contacts.r" "${args[@]}" 2>&1 | grep -v "Fontconfig warning"
+  exit_status=${PIPESTATUS[0]}
 
 fi
+
+if [ "$exit_status" -eq 0 ]; then
+  out_to_copy="${out_dir}/${O}"
+
+  if [ -f "$out_to_copy" ]; then
+    echo -e "\nDone! Created $out_to_copy\n"
+  fi
+fi
+

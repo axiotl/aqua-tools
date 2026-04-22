@@ -1,7 +1,7 @@
 #!/bin/bash
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 sample_sheet="$HOME/setup/sample_sheet.txt"
 
@@ -31,7 +31,7 @@ function help {
     echo "  [-r|--resolution   ] : Resolution in base pairs. Only 5000 and 1000 supported. Default 5000"
     echo "  [-T|--TAD          ] : Full path to TAD file, the boundaries of which will be used to obtain clusters"
     echo "  [-S|--score        ] : Inherent score to seed cluster formation. Default 0.7"
-    echo "  [-m|--mode         ] : Shape of bedpe to be called: loop, glob, flare or minimal. Default glob. Modes 'minimal' and 'flare' are experimental"
+    echo "  [-m|--mode         ] : Shape of bedpe to be called: loop, flare, minimal or glob. Default glob"
     echo "  [   --radius       ] : Bin distance units to search for neighbours. Default 1"
     echo "  [   --min_dist     ] : Distance in basepairs to filter out extracted elements. Default 0"
     echo "  [-h|--help         ]   Help message"
@@ -180,6 +180,13 @@ fi
 if [ "$m" != "loop" ] && [ "$m" != "flare" ] && [ "$m" != "glob" ] && [ "$m" != "minimal" ]; then
     echo "mode stritcly either loop, flare, minimal or glob"
     exit 1
+fi
+
+if [ "$R" != "range"    ] && [ "$T" != "NULL"   ] ; then
+
+    echo "Please use either --range or --TAD, not both!"
+    exit 1
+
 fi
 
 

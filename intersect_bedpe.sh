@@ -1,7 +1,7 @@
 #!/bin/bash
 
-data_dir=$HOME/lab-data
-aqua_dir=$HOME/aqua_tools
+data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
+aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
 temp_dir=$(mktemp -d /tmp/intersect_bedpe-XXXXXXXXXX)
 
@@ -140,6 +140,11 @@ fi
 
 # Check if mode is specified with print_bed or print_bool
 if [ "$m" != "blank" ]; then
+    if [ "$m" != "coordinate" ] && [ "$m" != "bed_ID" ]; then
+        echo -e "\n--display_mode must be either 'coordinate' or 'bed_ID'.\n"
+        usage
+        exit 1
+    fi
     if [ "$b" = "TRUE" ] || [ "$l" = "TRUE" ]; then
     echo -e "\n--display_mode cannot be combined with print_bed or print_bool. \n"
     usage
@@ -177,7 +182,7 @@ BEGIN {
     }
 
     # Compare and swap columns if necessary
-    if ($2 > $5 || ($2 == $5 && $3 > $6)) {
+    if ($1 > $4 || ($1 == $4 && ($2 > $5 || ($2 == $5 && $3 > $6)))) {
         # Swap columns 1-3 with 4-6
         temp1 = $1; temp2 = $2; temp3 = $3;
         $1 = $4; $2 = $5; $3 = $6;

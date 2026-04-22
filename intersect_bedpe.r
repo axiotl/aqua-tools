@@ -23,11 +23,9 @@ read_file_or_return_empty <- function(file_path) {
   }
 }
 
-
 sort_chromosomes <- function(df) {
   return(order(df[,1], as.numeric(df[,2])))
 }
-
 
 check_chr_prefix <- function(bedpe_data) {
   valid_chr_1 <- all(grepl("^chr", bedpe_data[[1]]))
@@ -38,7 +36,6 @@ check_chr_prefix <- function(bedpe_data) {
     quit(save="no")
   }
 }
-
 
 process_display_mode <- function(data, original_bedpe_list, flag_mode, print_env) {
   
@@ -77,7 +74,6 @@ process_display_mode <- function(data, original_bedpe_list, flag_mode, print_env
   
   invisible(lapply(1:nrow(data), process_row))
 }
-
 
 ################################################################################
 #                               Arguments                                      #
@@ -320,27 +316,35 @@ if (isFALSE(absence)) {
           write(row_key, stdout(), append = TRUE)
         }
       } else {  # coordinate mode
+        num_extra_cols <- ncol(intersections) - 5  # columns beyond chr, start, end, ID, bed_ID
+        
         for (i in 1:nrow(intersections)) {
           id <- as.numeric(intersections$ID[i])
           subset_row_str <- original_bedpe_list[id]
           bed_ID <- as.character(intersections$bed_ID[i])
           bed_ID_last_char <- substr(bed_ID, nchar(bed_ID), nchar(bed_ID))
           
-          rest_of_row <- intersections[i, 4:ncol(intersections), drop = FALSE]
+          # Get extra bed columns if any
+          if (num_extra_cols > 0) {
+            extras <- as.character(intersections[i, 6:ncol(intersections)])
+          } else {
+            extras <- character(0)
+          }
+          
+          # Dot placeholders for the missing foot's columns
+          dot_fill <- rep(".", num_extra_cols)
+          
           if (nrow(foot1) > 0 && nrow(foot2) == 0) {
-            # foot1 has data, append dot to the right of the letter
             suffix <- paste0(bed_ID_last_char, "-.")
+            # foot1 extras, then dots for missing foot2, then suffix
+            all_parts <- c(subset_row_str, extras, dot_fill, suffix)
           } else if (nrow(foot1) == 0 && nrow(foot2) > 0) {
-            # foot2 has data, append dot to the left of the letter
             suffix <- paste0(".-", bed_ID_last_char)
-          } 
+            # dots for missing foot1, then foot2 extras, then suffix
+            all_parts <- c(subset_row_str, dot_fill, extras, suffix)
+          }
           
-          rest_of_row <- cbind(rest_of_row, suffix)
-          
-          cols_to_remove <- c("ID", "bed_ID")
-          row <- lapply(c(subset_row_str, rest_of_row), as.character)
-          row <- row[!names(row) %in% cols_to_remove]
-          row_key <- do.call(paste, c(row, sep = "\t"))
+          row_key <- paste(all_parts, collapse = "\t")
           write(row_key, stdout(), append = TRUE)
         }
       }
