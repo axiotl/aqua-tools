@@ -1,4 +1,3 @@
-suppressPackageStartupMessages(library(dbscan))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(igraph))
 
@@ -17,33 +16,24 @@ args           <- commandArgs( trailingOnly = TRUE )
 
 file_bedpe <- args[1]
 flank      <- as.numeric(args[2])
-temp_path  <- args[3]
-
 
 bedpe <- read.table( file_bedpe, as.is = TRUE )
 
-
 flag_meta <- FALSE
 
-
 if (ncol(bedpe) < 6) {
-  
+
   cat("Please use a minimum of 6 column bedpe, exiting....\n")
   q(save = "no")
-  
+
 } else if (ncol(bedpe) > 6) {
-  
+
   flag_meta <- TRUE
-  
   meta_cols <- bedpe[, 7:ncol(bedpe)]
-  
   meta_cols <- data.frame(meta_cols, stringsAsFactors = FALSE)
-  
   num_meta_cols <- ncol(meta_cols)
-  
   bedpe <- bedpe[, 1:6]
 }
-
 
 colnames(bedpe) <- c(
   "chr1",
@@ -54,6 +44,14 @@ colnames(bedpe) <- c(
   "end2")
 
 
+# cis only; a trans pair would bridge two chromosomes into one cluster
+n_trans <- sum(bedpe$chr1 != bedpe$chr2)
+
+if (n_trans > 0) {
+  cat(paste0("Found ", n_trans, " trans pairs. cluster_bedpe only handles cis pairs, exiting....\n"))
+  q(save = "no")
+}
+
 # add flank
 bedpe$start1 <- bedpe$start1 - flank
 bedpe$start2 <- bedpe$start2 - flank
@@ -61,112 +59,50 @@ bedpe$start2 <- bedpe$start2 - flank
 bedpe$end1 <- bedpe$end1 + flank
 bedpe$end2 <- bedpe$end2 + flank
 
-# prepare for intersections
-bedpe <- bedpe[order(bedpe$chr1,bedpe$start1),]
-bedpe$id <- 1:nrow(bedpe)
+# sort rows; meta_cols is re-sorted below to match
+ord   <- order(bedpe$chr1, bedpe$start1)
+bedpe <- bedpe[ord, ]
 
-feet1 <- bedpe[,c(1:3,7)] 
-names(feet1) <- c("chr","start","end","id")
-
-feet2 <- bedpe[,c(4:6,7)] 
-names(feet2) <- c("chr","start","end","id")
-
-bedpe_bed <- rbind(
-  feet1,
-  feet2 )
-
-bedpe_bed <- bedpe_bed[order(
-  bedpe_bed$chr,
-  bedpe_bed$start ),]
-
-
-write.table(
-  bedpe_bed, 
-  paste0(temp_path,"/","cluster_bedpe-tmp.bed"), 
-  row.names = F, 
-  col.names = F, 
-  quote     = F, 
-  sep       = "\t")
-
-
-system(
-  paste(
-    "bedtools intersect -a ",
-    paste0(temp_path,"/","cluster_bedpe-tmp.bed"),
-    " -b ",
-    paste0(temp_path,"/","cluster_bedpe-tmp.bed"),
-    " -wa -wb | awk '{print $4,$8}' | awk '$1 != $2{print $0}' > ",
-    paste0(temp_path,"/","pair_id.txt"),
-    sep = ""
-  )
-)
-
-
-pair_file <- paste0(temp_path,"/","pair_id.txt")
-
-if(!file.exists(pair_file) || file.info(pair_file)$size == 0){
-  
-  bedpe$cluster <- paste0("cluster-", 1:nrow(bedpe))
-  
-} else {
-
-  pair_id <- read.table(
-    paste0(temp_path,"/","pair_id.txt"), 
-    sep = " ")
-  
-  pair_id <- data.frame(
-    x = pmin(pair_id$V1, pair_id$V2),
-    y = pmax(pair_id$V1, pair_id$V2)
-  )
-  
-  pair_id <- pair_id[order(pair_id$x, pair_id$y),]
-  pair_id <- unique(pair_id)
-  
-  g               <- graph_from_edgelist(as.matrix(pair_id), directed = FALSE)
-  components      <- components(g)
-  pair_id$cluster <- components$membership[pair_id$x]
-  pair_id$cluster <- as.integer(factor(pair_id$cluster))
-  
-  cluster_mapping <- rbind(
-    pair_id %>% select(id = x, cluster),
-    pair_id %>% select(id = y, cluster)
-  ) %>% distinct()
-  
-  bedpe <- bedpe %>%
-    full_join(cluster_mapping, by = "id")
-  
-  
-  
-  vec <- bedpe$cluster
-  
-  unique_counter <- 1
-  index_map <- list()
-  
-  for (i in 1:length(vec)) {
-    
-    if (is.na(vec[i])) {
-      
-      vec[i]         <- unique_counter
-      unique_counter <- unique_counter + 1
-      
-    } else {
-      
-      if (!is.null(index_map[[as.character(vec[i])]])) {
-        vec[i] <- index_map[[as.character(vec[i])]]
-        
-      } else {
-        
-        index_map[[as.character(vec[i])]] <- unique_counter
-        vec[i]         <- unique_counter
-        unique_counter <- unique_counter + 1
-        
-      }
-    }
-  }
-  
-  bedpe$cluster <- paste0("cluster-",vec)
-  
+if (flag_meta) {
+  meta_cols <- meta_cols[ord, , drop = FALSE]
 }
+
+n <- nrow(bedpe)
+
+# cluster loops that share an anchor
+# one row per anchor; idx remembers which loop it came from
+feet <- data.frame(
+  chr   = c(bedpe$chr1,   bedpe$chr2),
+  start = c(bedpe$start1, bedpe$start2),
+  end   = c(bedpe$end1,   bedpe$end2),
+  idx   = seq_len(2L * n),
+  stringsAsFactors = FALSE)
+
+# sort anchors by position
+o  <- order(feet$chr, feet$start, feet$end)
+fs <- feet[o, ]
+
+# furthest end seen before this row, per chromosome
+prev_max <- ave(
+  as.numeric(fs$end), fs$chr,
+  FUN = function(z) c(-Inf, cummax(z)[-length(z)]))
+
+# number the runs; >= means anchors that only touch stay apart
+run_of_foot         <- integer(2L * n)
+run_of_foot[fs$idx] <- cumsum(fs$start >= prev_max)
+
+# run number for each loop's left and right anchor
+run1 <- run_of_foot[seq_len(n)]
+run2 <- run_of_foot[seq_len(n) + n]
+
+# each loop is an edge between its two runs
+el <- cbind(run1, run2)
+storage.mode(el) <- "integer"
+
+cl <- components(graph_from_edgelist(el, directed = FALSE))$membership[run1]
+
+# number clusters in order of appearance
+bedpe$cluster <- paste0("cluster-", match(cl, unique(cl)))
 
 # remove flank
 bedpe$start1 <- bedpe$start1 + flank
@@ -188,6 +124,18 @@ if(flag_meta){
   )
 }
 
-for( i in 1:nrow(bedpe) ){ 
-  try(cat( paste( bedpe[i,], collapse = "\t"), "\n", sep = "" ), silent=TRUE) 
-}
+
+tryCatch(
+  write.table(
+    bedpe,
+    "",
+    sep       = "\t",
+    quote     = FALSE,
+    row.names = FALSE,
+    col.names = FALSE),
+  error = function(e) {
+    if (identical(conditionMessage(e), "ignoring SIGPIPE signal")) {
+      quit(save = "no", status = 0)
+    }
+    stop(e)
+  })

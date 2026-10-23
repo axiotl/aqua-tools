@@ -8,6 +8,9 @@ suppressPackageStartupMessages({
 })
 options(scipen = 999)
 options(help_type = "text")
+
+source(file.path(Sys.getenv("AQUA_TOOLS_DIR", file.path(Sys.getenv("HOME"), "aqua_tools")), "aqua_functions.r"))
+
 Args <- commandArgs(trailingOnly = TRUE)
 
 # ==========================================================================
@@ -37,7 +40,7 @@ pre_check_power_law <- function(sample_dir, bin_size) {
   power_laws <- read.table(power_law_path, as.is = TRUE, skip = 1)
   colnames(power_laws) <- c("off", "on", "res")
   power_laws$res <- as.numeric(power_laws$res)
-  
+
   if (!bin_size %in% power_laws$res) {
     cat("\nNo power law data available for resolution", bin_size, "at", sample_dir,"\n")
     quit(save="no")
@@ -51,7 +54,7 @@ read_power_law_data <- function(sample_dir, bin_size) {
     pattern = paste0("inherentStats", ".txt"),
     full.names = TRUE
   )
-  
+
   power_laws <- read.table(power_law_path, as.is = TRUE, skip = 1)
   colnames(power_laws) <- c("off", "on", "res")
   power_laws <- power_laws[! power_laws$off %in% "off",]
@@ -59,7 +62,7 @@ read_power_law_data <- function(sample_dir, bin_size) {
   power_laws$on <- as.numeric(power_laws$on)
   power_laws$res <- as.numeric(power_laws$res)
   power_laws <- power_laws[power_laws$res == bin_size,]
-  
+
   return(power_laws)
 }
 
@@ -310,7 +313,8 @@ run_apa <- function(hic_path, bedpe, resolution, window,
   chr2_q_vec <- vapply(chr2_vec, match_chr_name, character(1),
                        hic_chroms = hic_chrom_vec, USE.NAMES = FALSE)
 
-  # Deduplicate by exact interval identity (matches Juicer HashSet)
+  # Deduplicate original loops by exact interval identity (matches Juicer
+  # HashSet), before binifying
   dedup_key <- paste(chr1_q_vec, s1_vec, e1_vec, chr2_q_vec, s2_vec, e2_vec, sep = "_")
   dup_mask  <- duplicated(dedup_key)
 
@@ -321,16 +325,24 @@ run_apa <- function(hic_path, bedpe, resolution, window,
     s2_vec <- s2_vec[keep]; e2_vec <- e2_vec[keep]
   }
 
-  # Snap midpoints to resolution grid
-  mid1_vec <- floor(((s1_vec + e1_vec) / 2) / resolution) * resolution
-  mid2_vec <- floor(((s2_vec + e2_vec) / 2) / resolution) * resolution
+  # Binify: one sub-loop per anchor1-bin x anchor2-bin pair
+  binned <- binify_bedpe(
+    data.frame(chr1 = chr1_q_vec, s1 = s1_vec, e1 = e1_vec,
+               chr2 = chr2_q_vec, s2 = s2_vec, e2 = e2_vec,
+               stringsAsFactors = FALSE),
+    resolution)
 
-  # Window boundaries in bin coordinates
+  chr1_q_vec <- binned$chr1
+  chr2_q_vec <- binned$chr2
+
+  # Window boundaries in bin coordinates, centered on each sub-loop's bins
   win_res <- as.integer(window)
-  rs_bin  <- as.integer(mid1_vec / resolution) - win_res
-  re_bin  <- as.integer(mid1_vec / resolution) + win_res
-  cs_bin  <- as.integer(mid2_vec / resolution) - win_res
-  ce_bin  <- as.integer(mid2_vec / resolution) + win_res
+  bin1    <- as.integer(round(binned$s1 / resolution))
+  bin2    <- as.integer(round(binned$s2 / resolution))
+  rs_bin  <- bin1 - win_res
+  re_bin  <- bin1 + win_res
+  cs_bin  <- bin2 - win_res
+  ce_bin  <- bin2 + win_res
 
   # Split into cis and trans groups
   is_cis    <- (chr1_q_vec == chr2_q_vec)
@@ -810,7 +822,7 @@ if (length(Args) == 20) {
   merge_stats_list_A <- lapply(stat_paths_A, read.table, as.is = TRUE)
   merge_stats_list_B <- lapply(stat_paths_B, read.table, as.is = TRUE)
 
-  # Resolve normalization across all samples 
+  # Resolve normalization across all samples
   if (isTRUE(flag_inherent)) {
     flag_norm <- "none"  # so aqua/cpm factors = 1
     flag_loop_norm <- "TRUE"
@@ -856,7 +868,7 @@ if (length(Args) == 20) {
     hic_path   <- hic_paths_A[k]
     sample_dir <- dirname(hic_path)
     cached_power_laws <- NULL
-    if(flag_inherent == TRUE){ 
+    if(flag_inherent == TRUE){
       pre_check_power_law(sample_dir, res)
       cached_power_laws <- read_power_law_data(sample_dir, res)
     }
@@ -888,7 +900,7 @@ if (length(Args) == 20) {
     hic_path   <- hic_paths_B[k]
     sample_dir <- dirname(hic_path)
     cached_power_laws <- NULL
-    if(flag_inherent == TRUE){ 
+    if(flag_inherent == TRUE){
       pre_check_power_law(sample_dir, res)
       cached_power_laws <- read_power_law_data(sample_dir, res)
     }
@@ -1030,17 +1042,17 @@ if (length(Args) == 20) {
     plot_labelB <- sample_labels_B[1]
   }
 
-  test_con <- tryCatch(file(out_file, open = "ab"), error = function(e) NULL)
-  if (is.null(test_con)) {
-    stop(sprintf(
-      "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
-      out_file
-    ))
-  }
-  close(test_con)
-
   if (n_samples_A > 1 || n_samples_B > 1) {
     plot_title <- paste0(plot_labelA, "\n", plot_labelB, "\nB - A delta (n.loop=", num_loops, ")")
+    test_con <- tryCatch(file(out_file, open = "ab"), error = function(e) NULL)
+    if (is.null(test_con)) {
+      stop(sprintf(
+        "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
+        out_file
+      ))
+    }
+    close(test_con)
+
     pdf(out_file, width = 14, height = 4.5, useDingbats = FALSE)
     grid.draw(arrangeGrob(p1, p2, p3, nrow = 1,
       top = textGrob(plot_title, gp = gpar(fontsize = 10))))
@@ -1049,6 +1061,15 @@ if (length(Args) == 20) {
     p1 <- p1 + ggtitle(plot_labelA)
     p2 <- p2 + ggtitle(plot_labelB)
     p3 <- p3 + ggtitle(paste0("delta (n.loop=", num_loops, ")"))
+
+    test_con <- tryCatch(file(out_file, open = "ab"), error = function(e) NULL)
+    if (is.null(test_con)) {
+      stop(sprintf(
+        "Cannot write to '%s' -- the file may be open in another application. Please close it and try again.",
+        out_file
+      ))
+    }
+    close(test_con)
 
     pdf(out_file, width = 14, height = 4.5, useDingbats = FALSE)
     grid.draw(arrangeGrob(p1, p2, p3, nrow = 1))

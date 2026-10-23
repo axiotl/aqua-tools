@@ -3,7 +3,7 @@
 data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
 aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
-echo "List of AQuA tools on this Tinkerbox"
+echo "List of AQuA tools on this Tinker box"
 echo
 echo "---------------"
 echo

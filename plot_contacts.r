@@ -5,12 +5,14 @@ options(scipen = 999)
 options(warn = -1)
 options(help_type = "text")
 
-data_dir <- Sys.getenv("LAB_DATA_DIR", path.expand("~/lab-data"))
+data_dir <- Sys.getenv("LAB_DATA_DIR", file.path(Sys.getenv("HOME"), "lab-data"))
 
 Args <- commandArgs(trailingOnly = T)
 
 analysis_type <- Args[1]
 flag_inter <- as.logical(Args[2])
+
+source(file.path(Sys.getenv("AQUA_TOOLS_DIR", file.path(Sys.getenv("HOME"), "aqua_tools")), "aqua_functions.r"))
 
 #################################################################
 ##                            Intra                            ##
@@ -88,26 +90,6 @@ compute_final_layout <- function(A_focus,
   )
 }
 
-zero_diag <- function(matrix, width) {
-  if (nrow(matrix) != ncol(matrix)) {
-    stop("zero_diag: matrix must be square")
-  }
-  if (nrow(matrix) <= width) {
-    stop(sprintf(
-      "zero_diag: matrix is too small (%d x %d) for requested diagonal width (%d). Try increase the range.",
-      nrow(matrix), ncol(matrix), width
-    ))
-  }
-
-  n <- nrow(matrix)
-  for (j in 0:width) {
-    for (i in 1:(n - j)) {
-      matrix[i + j, i] <- 0
-      matrix[i, i + j] <- 0
-    }
-  }
-  return(matrix)
-}
 
 draw_scale <- function(
   A, C, w, start_x, start_y, breakList,
@@ -519,8 +501,7 @@ draw_default_annotations <- function(bed_file,
                                           interval_start, interval_end)
 
   # Coordinate transform
-  n_bins_eff <- ncol(A) - 1
-  scale_factor <- (n_bins_eff * w) / interval_len
+  scale_factor <- w / bin_size
   x0 <- start_x / 2 - 0.5 * w
 
   map_x <- function(pos_bp) {
@@ -699,9 +680,8 @@ draw_feature_2 <- function(chr, start_pos, end_pos, label_txt, color,
                            gene_cex = gene_cex, coord_cex = coord_cex,
                            point_mode = FALSE, point_cex = 0.3) {
   
-  # scale (ncol(A) -1 to match strawr boundary indexing (prevents annotation drift)
-  n_bins_eff <- ncol(A) - 1
-  scale_factor <- (n_bins_eff * w) / interval_len
+  # user-space units per bp
+  scale_factor <- w / bin_size
 
   # left edge of the first bin on the base
   x0 <- start_x / 2 - 0.5 * w
@@ -753,7 +733,8 @@ draw_bed <- function(bed_file, color, depth, flag_text, ruler_top,
   colnames(bed) <- c("chr", "start", "end")
 
   # Subset the BED features to visualized genomic interval
-  bed <- bed[bed$chr == interval_chr & bed$start < interval_end & bed$end > interval_start, ]
+  interval_right_edge <- interval_end + bin_size
+  bed <- bed[bed$chr == interval_chr & bed$start < interval_right_edge & bed$end > interval_start, ]
   if (nrow(bed) == 0) {
     warning("draw_bed warning: no features in the specified interval")
     return()
@@ -761,7 +742,7 @@ draw_bed <- function(bed_file, color, depth, flag_text, ruler_top,
 
   # Clip the feature boundaries to visualized interval
   bed$start <- pmax(bed$start, interval_start)
-  bed$end <- pmin(bed$end, interval_end)
+  bed$end <- pmin(bed$end, interval_right_edge)
 
   if (!flag_text) {
     for (i in seq_len(nrow(bed))) {
@@ -884,10 +865,22 @@ draw_ruler <- function(start_x, start_y, w, n_bins, bin_coordinates,
   suppress_label_50kb  <- (bin_bp == 5000 && w <= 0.8) ||  (bin_bp == 1000 && w < 0.1)
   suppress_label_10kb  <- (bin_bp == 5000 && w <= 2) ||  (bin_bp == 1000 && w < 0.5)
 
-
   # First bin coordinate (bp)
   first_bp <- suppressWarnings(as.numeric(bin_coordinates[1]))
   if (is.na(first_bp)) stop("ruler error: bin_coordinates[1] must be numeric base-pair coordinate")
+
+  # Also drop a tier's labels whenever they physically cannot fit between its ticks
+  label_fits <- function(step_bp, sample_lab, cex) {
+    spacing <- (step_bp / bin_bp) * w
+    strwidth(sample_lab, cex = cex, units = "user") * 1.10 < spacing
+  }
+
+  widest_lab <- prettyNum(first_bp + (n_bins - 1) * bin_bp,
+                          big.mark = ",", scientific = FALSE)
+  fit_500kb <- label_fits(5e5, widest_lab, cex_mid)
+  fit_100kb <- label_fits(1e5, widest_lab, cex_mid)
+  fit_50kb  <- label_fits(5e4, widest_lab, cex_mid)
+  fit_10kb  <- label_fits(1e4, widest_lab, cex_mid)
 
   # Draw ticks
   for (k in 1:n_bins) {
@@ -914,14 +907,16 @@ draw_ruler <- function(start_x, start_y, w, n_bins, bin_coordinates,
       )
     } else if (at_500kb) {
       segments(xk, base_y, xk, base_y + len_500k, col = col_ticks, lwd = 0.18, xpd = NA)
-      lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
-      text(xk, base_y - label_offset_mid,
-        labels = lab,
-        cex = cex_mid, col = col_labels, adj = c(0.5, 1), xpd = NA
-      )
+      if (fit_500kb) {
+        lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
+        text(xk, base_y - label_offset_mid,
+          labels = lab,
+          cex = cex_mid, col = col_labels, adj = c(0.5, 1), xpd = NA
+        )
+      }
     } else if (at_100kb) {
       segments(xk, base_y, xk, base_y + len_100k, col = col_ticks, lwd = 0.18, xpd = NA)
-      if (!suppress_label_100kb) {
+      if (!suppress_label_100kb && fit_100kb) {
         lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
         text(xk, base_y - label_offset_mid,
           labels = lab,
@@ -931,7 +926,7 @@ draw_ruler <- function(start_x, start_y, w, n_bins, bin_coordinates,
     } else if (at_50kb) {
       segments(xk, base_y, xk, base_y + len_50k, col = col_ticks, lwd = 0.16, xpd = NA)
       # Label 50 kb only at 1 kb resolution; suppress if cramped
-      if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb) {
+      if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb && fit_50kb) {
         lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
         text(xk, base_y - label_offset_mid,
           labels = lab,
@@ -940,7 +935,7 @@ draw_ruler <- function(start_x, start_y, w, n_bins, bin_coordinates,
       }
     } else if (at_10kb) {
       segments(xk, base_y, xk, base_y + len_10k, col = col_ticks, lwd = 0.14, xpd = NA)
-      if (!suppress_label_10kb) {                                  # NEW
+      if (!suppress_label_10kb && fit_10kb) {
         lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
         text(xk, base_y - label_offset_mid,
           labels = lab,
@@ -1040,6 +1035,17 @@ draw_contacts <- function(A,
   n_cols <- ncol(A)
   legend_out <- NULL
 
+  # Values that resolve to the page-background color (white) should be skipped
+  white_rows <- which(toupper(rownames(C)) %in% c("WHITE", "#FFFFFF"))
+  if (length(white_rows)) {
+    brk     <- C[, "breaks"]
+    lo_i    <- min(white_rows); hi_i <- max(white_rows)
+    skip_lo <- if (lo_i == 1L)     -Inf else (brk[lo_i - 1L] + brk[lo_i]) / 2
+    skip_hi <- if (hi_i == nrow(C)) Inf else (brk[hi_i] + brk[hi_i + 1L]) / 2
+  } else {
+    skip_lo <- 0; skip_hi <- 0   # fallback: behaves like == 0
+  }
+
   # ---------------- TRIANGLE MODE -----------------------------------
   if (!include_expand_viewport) {
     # Footprint outline
@@ -1059,7 +1065,7 @@ draw_contacts <- function(A,
     for (i in seq_len(n_rows)) {
       for (j in i:n_cols) {
         val <- A[i, j]
-        if (is.na(val) || val == 0) next
+        if (is.na(val) || (val >= skip_lo && val <= skip_hi)) next
         color <- rownames(C[order(abs(C[, "breaks"] - val), decreasing = FALSE), ])[1]
         center <- get_center(i, j, w)
         draw_diamond(center, w, color, highlight = FALSE)
@@ -1071,16 +1077,19 @@ draw_contacts <- function(A,
 
     # BEDPE highlighting
     if (!identical(bedpe, "FALSE")) {
-      prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color)
-      pairs_list <- prep$pairs_list
+      prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color,
+                                bedpe_lwd_param = bedpe_lwd)
+      pairs_list   <- prep$pairs_list
       bedpe_colors <- prep$color_map
+      bedpe_lwds   <- prep$lwd_map
 
       base_y <- start_y / 2 + 0.5 * w
 
       for (nm in names(pairs_list)) {
         pairs <- pairs_list[[nm]]
         if (is.null(pairs) || nrow(pairs) == 0L) next
-        bedpe_col <- unname(bedpe_colors[[nm]])
+        bedpe_col      <- unname(bedpe_colors[[nm]])
+        bedpe_lwd_this <- unname(bedpe_lwds[[nm]])
 
         for (p in seq_len(nrow(pairs))) {
           i_start <- pairs$i[p]
@@ -1104,7 +1113,8 @@ draw_contacts <- function(A,
 
           clp <- clip_poly_ymin(px, py, base_y)
           if (length(clp$x) >= 3) {
-            polygon(clp$x, clp$y, border = bedpe_col, col = NA, lwd = 0.8, xpd = NA)
+            polygon(clp$x, clp$y, border = bedpe_col, col = NA,
+                    lwd = bedpe_lwd_this, xpd = NA)
           }
         }
       }
@@ -1186,7 +1196,7 @@ draw_contacts <- function(A,
       if ((j_plot - i_plot) > max_offset) next
 
       val <- A[i_big, j_big]
-      if (is.na(val) || val == 0) next
+      if (is.na(val) || (val >= skip_lo && val <= skip_hi)) next
 
       color <- rownames(C[order(abs(C[, "breaks"] - val), decreasing = FALSE), ])[1]
       center <- get_center(i_plot, j_plot, w)
@@ -1201,16 +1211,19 @@ draw_contacts <- function(A,
 
   # BEDPE
   if (!identical(bedpe, "FALSE")) {
-    prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color)
-    pairs_list <- prep$pairs_list
+    prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color,
+                                bedpe_lwd_param = bedpe_lwd)
+    pairs_list   <- prep$pairs_list
     bedpe_colors <- prep$color_map
+    bedpe_lwds   <- prep$lwd_map
 
     base_y <- start_y / 2 + 0.5 * w
 
     for (nm in names(pairs_list)) {
       pairs <- pairs_list[[nm]]
       if (is.null(pairs) || nrow(pairs) == 0L) next
-      bedpe_col <- unname(bedpe_colors[[nm]])
+      bedpe_col      <- unname(bedpe_colors[[nm]])
+      bedpe_lwd_this <- unname(bedpe_lwds[[nm]])
 
       for (p in seq_len(nrow(pairs))) {
         i_start_big <- pairs$i[p]
@@ -1242,11 +1255,11 @@ draw_contacts <- function(A,
 
         clp <- clip_poly_ymin(px, py, base_y)
         if (length(clp$x) >= 3) {
-          polygon(clp$x, clp$y, border = bedpe_col, col = NA, lwd = 0.8, xpd = NA)
+          polygon(clp$x, clp$y, border = bedpe_col, col = NA,
+                  lwd = bedpe_lwd_this, xpd = NA)
         }
       }
     }
-
     labs <- names(bedpe_colors)
     legend_out <- list(labels = labs, colors = unname(bedpe_colors))
   }
@@ -1389,7 +1402,10 @@ preflight_custom_beds <- function(ann_custom, interval_chr, interval_start, inte
     x <- x[, 1:3, drop = FALSE]
     colnames(x) <- c("chr", "start", "end")
 
-    in_range <- x$chr == interval_chr & x$start < interval_end & x$end > interval_start
+    interval_right_edge <- interval_end + bin_size
+    in_range <- x$chr == interval_chr & x$start < interval_right_edge & x$end > interval_start
+
+    #in_range <- x$chr == interval_chr & x$start < interval_end & x$end > interval_start
     if (any(in_range, na.rm = TRUE)) {
       valid <- c(valid, f)
     } else {
@@ -1500,7 +1516,7 @@ render_triangle_plot <- function(output_name,
 
   # Draw title
   top <<- grconvertY(1 - 0.06, from = "ndc", to = "user")
-  draw_title(interval_chr, interval_start, interval_end)
+  draw_title(interval_chr, interval_start, interval_right_edge)
 
   scale_y <- if (isTRUE(flag_expand_viewport) && !is.null(legend_mid_y)) {
     legend_mid_y
@@ -1534,6 +1550,9 @@ render_triangle_plot <- function(output_name,
   # Track the number of custom annotation files actually drawn
   n_bed <- 0
   custom_bbox_bottom_actual <- NULL
+  custom_block_extent <- NULL
+  custom_min_y <- NA_real_
+  custom_features_skipped <- 0L
 
   if (!identical(ann_custom, "NONE") && nzchar(ann_custom)) {
     annotation_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
@@ -1542,30 +1561,103 @@ render_triangle_plot <- function(output_name,
     n_files <- length(annotation_files)
     n_bed <- n_files
 
-    track_depths <- seq(from = custom_start, by = custom_step, length.out = n_files)
-
     final_colors <- resolve_custom_colors(
       ann_custom_colors, n_files, base_colors = triangle_base_colors
     )
+    label_flags <- resolve_custom_labels(ann_custom_labels, n_files)
 
-    # Draw each track
-    for (i in seq_along(annotation_files)) {
+    ruler_top_val <- legend_info$ruler$target_top
+
+    # bp -> user x, matching draw_feature_2 and draw_default_annotations
+    scale_factor <- w / bin_size
+    map_x_custom <- function(bp) {
+      start_x / 2 - 0.5 * w + (bp - interval_start) * scale_factor
+    }
+
+    # Dim features that miss every bedpe foot, as the default track does
+    custom_dim_fun <- NULL
+    if (!identical(bedpe, "FALSE") && is.list(bedpe) && length(bedpe)) {
+      custom_dim_fun <- function(s, e) is_gene_in_any_bedpe(s, e, bedpe)
+    }
+
+    # Plan before drawing: a labeled track's height depends on how many lanes
+    # its labels need, so the block extent is not known until packing has run
+    track_depths <- numeric(n_files)
+    track_plans  <- vector("list", n_files)
+    cursor <- custom_start
+
+    for (i in seq_len(n_files)) {
+      track_depths[i] <- cursor
+
+      bed_i <- NULL
+      if (label_flags[i]) {
+        bed_i <- load_and_subset_custom_bed(
+          annotation_files[i], interval_chr, interval_start, interval_end,
+          want_labels = TRUE
+        )
+      }
+
+      if (is.null(bed_i)) {
+        cursor <- cursor + custom_step
+        next
+      }
+
+      track_plans[[i]] <- plan_custom_track(bed_i, scale_factor)
+      cursor <- cursor + track_plans[[i]]$height + custom_ann_geom$file_gap
+    }
+
+    # Deepest point of the block, as a depth below the ruler top
+    custom_block_extent <- max(vapply(seq_len(n_files), function(i) {
+      track_depths[i] +
+        if (is.null(track_plans[[i]])) 0 else track_plans[[i]]$height
+    }, numeric(1)))
+
+    # Both passes go through here so the mask and the redraw stay in step
+    draw_all_custom <- function() {
+      min_y <- Inf
+      skipped <- 0L
+
+      for (i in seq_len(n_files)) {
+        if (!file.exists(annotation_files[i])) next
+
+        if (is.null(track_plans[[i]])) {
+          draw_bed(annotation_files[i], final_colors[i], track_depths[i], FALSE,
+            ruler_top = ruler_top_val
+          )
+          min_y <- min(min_y, ruler_top_val - track_depths[i])
+          next
+        }
+
+        res <- draw_custom_annotations(
+          bed           = track_plans[[i]]$bed,
+          color         = final_colors[i],
+          axis          = "x",
+          map_pos       = map_x_custom,
+          baseline      = ruler_top_val,
+          depth         = track_depths[i],
+          dim_fun       = custom_dim_fun,
+          page_boundary = page_bottom_y
+        )
+        if (is.finite(res$min_extent)) min_y <- min(min_y, res$min_extent)
+        skipped <- skipped + res$features_skipped
+      }
+
+      list(min_y = if (is.finite(min_y)) min_y else NA_real_, skipped = skipped)
+    }
+
+    draw_all_custom()
+
+    for (i in seq_len(n_files)) {
       if (!file.exists(annotation_files[i])) next
-
-      draw_bed(annotation_files[i], final_colors[i], track_depths[i], FALSE,
-        ruler_top = legend_info$ruler$target_top
-      )
-
       legend_add(basename(annotation_files[i]), final_colors[i], "line", lwd = 1.4)
     }
 
     # Custom annotation bounding box
     if (n_bed > 0) {
-      ruler_top_val <- legend_info$ruler$target_top
       ruler_base_val <- legend_info$ruler$base_y
 
       custom_bbox_top <- ruler_base_val - bbox_gap
-      custom_bbox_bottom <- ruler_top_val - track_depths[n_bed] - 0.5
+      custom_bbox_bottom <- ruler_top_val - custom_block_extent - 0.5
 
       custom_bbox_bottom_actual <- custom_bbox_bottom - bbox_pad_y
 
@@ -1578,12 +1670,9 @@ render_triangle_plot <- function(output_name,
       )
 
       # Redraw custom tracks on top of the bounding box
-      for (i in seq_along(annotation_files)) {
-        if (!file.exists(annotation_files[i])) next
-        draw_bed(annotation_files[i], final_colors[i], track_depths[i], FALSE,
-          ruler_top = legend_info$ruler$target_top
-        )
-      }
+      redrawn <- draw_all_custom()
+      custom_min_y <- redrawn$min_y
+      custom_features_skipped <- redrawn$skipped
     }
   }
 
@@ -1595,9 +1684,8 @@ render_triangle_plot <- function(output_name,
   }
 
   # Draw default annotations
-  exon_depth <- if (n_bed > 0) {
-    last_custom_depth <- custom_start + custom_step * (n_bed - 1)
-    last_custom_depth + gap_after_custom
+  exon_depth <- if (n_bed > 0 && !is.null(custom_block_extent)) {
+    custom_block_extent + gap_after_custom
   } else {
     2.5
   }
@@ -1777,8 +1865,9 @@ render_triangle_plot <- function(output_name,
     }
   }
 
-  # Draw overflow notice if genes were skipped
-  if (genes_skipped > 0L) {
+  # Draw overflow notice if annotations were skipped
+  annotations_skipped <- genes_skipped + custom_features_skipped
+  if (annotations_skipped > 0L) {
     notice_x <- grconvertX(0.96, from = "ndc", to = "user")
     notice_y <- page_bottom_y + 1
     notice_w <- 22
@@ -1794,7 +1883,7 @@ render_triangle_plot <- function(output_name,
       lwd = 0.5, xpd = NA
     )
 
-    notice_text <- sprintf("%d gene(s) omitted\n(insufficient page space)", genes_skipped)
+    notice_text <- sprintf("%d annotation(s) omitted\n(insufficient page space)", annotations_skipped)
     text(notice_x - notice_w / 2, notice_y,
       labels = notice_text, cex = 0.30, col = "#888888", xpd = NA
     )
@@ -1818,6 +1907,12 @@ render_triangle_plot <- function(output_name,
       xjust = 1, yjust = 1, xpd = NA, y.intersp = 1.15
     )
   }
+
+ # Extend the PDF crop to include custom labels (they may sit below, or replace default annotations)
+  if (is.finite(custom_min_y)) {
+    prev <- get0("last_annotation_min_y", ifnotfound = NA_real_)
+    last_annotation_min_y <<- if (is.finite(prev)) min(prev, custom_min_y) else custom_min_y
+  }
 }
 
 #################################################################
@@ -1839,8 +1934,11 @@ calculate_plot_dimensions <- function(interval_start1, interval_end1,
                                       bin_size,
                                       max_width  = 100,
                                       max_height = 100) {
-  bins1 <- ceiling((interval_end1 - interval_start1) / bin_size)
-  bins2 <- ceiling((interval_end2 - interval_start2) / bin_size)
+
+  # interval_end is the start of the last bin, so the drawn grid is one bin
+  # wider than the span between the two bin starts
+  bins1 <- interval_to_bins(interval_start1, interval_end1 + bin_size, bin_size)$n
+  bins2 <- interval_to_bins(interval_start2, interval_end2 + bin_size, bin_size)$n
 
   aspect_ratio <- bins2 / bins1
 
@@ -1898,6 +1996,13 @@ draw_ruler_inter <- function(left_side, top, w, A,
                           (bin_bp == 10000 && w < 0.20)
   suppress_label_10kb  <- (bin_bp <= 5000 && w < 2)
 
+  # The rules above are per-resolution; they do not cover every window size.
+  # Also drop a tier's labels if they can't fit between its ticks
+  label_fits <- function(step_bp, sample_lab, cex) {
+    spacing <- (step_bp / bin_bp) * w
+    strwidth(sample_lab, cex = cex, units = "user") * 1.10 < spacing
+  }
+
   # Label offset from baseline
   label_offset_mb <- 0.15
   label_offset_mid <- 0.5
@@ -1906,6 +2011,13 @@ draw_ruler_inter <- function(left_side, top, w, A,
   if (axis == "x") {
     first_bp <- suppressWarnings(as.numeric(colnames(A)[1]))
     n_bins <- n_cols
+
+    widest_lab <- prettyNum(first_bp + (n_bins - 1) * bin_bp,
+                            big.mark = ",", scientific = FALSE)
+    fit_500kb <- label_fits(5e5, widest_lab, cex_mid)
+    fit_100kb <- label_fits(1e5, widest_lab, cex_mid)
+    fit_50kb  <- label_fits(5e4, widest_lab, cex_mid)
+    fit_10kb  <- label_fits(1e4, widest_lab, cex_mid)
 
     # Span of ruler
     x_left <- left_side
@@ -1939,14 +2051,16 @@ draw_ruler_inter <- function(left_side, top, w, A,
         )
       } else if (at_500kb) {
         segments(xk, base_y, xk, base_y - len_500k, col = col_ticks, lwd = 0.18, xpd = NA)
-        lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
-        text(xk, base_y - len_500k - label_offset_mid,
-          labels = lab,
-          cex = cex_mid, col = col_labels, adj = c(0.5, 1), xpd = NA
-        )
+        if (fit_500kb) {
+          lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
+          text(xk, base_y - len_500k - label_offset_mid,
+            labels = lab,
+            cex = cex_mid, col = col_labels, adj = c(0.5, 1), xpd = NA
+          )
+        }
       } else if (at_100kb) {
         segments(xk, base_y, xk, base_y - len_100k, col = col_ticks, lwd = 0.18, xpd = NA)
-        if (!suppress_label_100kb) {
+        if (!suppress_label_100kb && fit_100kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(xk, base_y - len_100k - label_offset_mid,
             labels = lab,
@@ -1955,7 +2069,7 @@ draw_ruler_inter <- function(left_side, top, w, A,
         }
       } else if (at_50kb) {
         segments(xk, base_y, xk, base_y - len_50k, col = col_ticks, lwd = 0.16, xpd = NA)
-        if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb) {
+        if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb && fit_50kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(xk, base_y - len_50k - label_offset_mid,
             labels = lab,
@@ -1964,7 +2078,7 @@ draw_ruler_inter <- function(left_side, top, w, A,
         }
       } else if (at_10kb) {
         segments(xk, base_y, xk, base_y - len_10k, col = col_ticks, lwd = 0.14, xpd = NA)
-        if (bin_bp <= 5000 && !suppress_label_10kb) {
+        if (bin_bp <= 5000 && !suppress_label_10kb && fit_10kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(xk, base_y - len_10k - label_offset_mid,
             labels = lab,
@@ -1978,6 +2092,13 @@ draw_ruler_inter <- function(left_side, top, w, A,
   } else if (axis == "y") {
     first_bp <- suppressWarnings(as.numeric(rownames(A)[1]))
     n_bins <- n_rows
+
+    widest_lab <- prettyNum(first_bp + (n_bins - 1) * bin_bp,
+                            big.mark = ",", scientific = FALSE)
+    fit_500kb <- label_fits(5e5, widest_lab, cex_mid)
+    fit_100kb <- label_fits(1e5, widest_lab, cex_mid)
+    fit_50kb  <- label_fits(5e4, widest_lab, cex_mid)
+    fit_10kb  <- label_fits(1e4, widest_lab, cex_mid)
 
     # Span of ruler
     y_top <- top
@@ -2011,14 +2132,16 @@ draw_ruler_inter <- function(left_side, top, w, A,
         )
       } else if (at_500kb) {
         segments(base_x, yk, base_x - len_500k, yk, col = col_ticks, lwd = 0.18, xpd = NA)
-        lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
-        text(base_x - len_500k - label_offset_mid, yk,
-          labels = lab,
-          cex = cex_mid, col = col_labels, adj = c(1, 0.5), xpd = NA
-        )
+        if (fit_500kb) {
+          lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
+          text(base_x - len_500k - label_offset_mid, yk,
+            labels = lab,
+            cex = cex_mid, col = col_labels, adj = c(1, 0.5), xpd = NA
+          )
+        }
       } else if (at_100kb) {
         segments(base_x, yk, base_x - len_100k, yk, col = col_ticks, lwd = 0.18, xpd = NA)
-        if (!suppress_label_100kb) {
+        if (!suppress_label_100kb && fit_100kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(base_x - len_100k - label_offset_mid, yk,
             labels = lab,
@@ -2027,7 +2150,7 @@ draw_ruler_inter <- function(left_side, top, w, A,
         }
       } else if (at_50kb) {
         segments(base_x, yk, base_x - len_50k, yk, col = col_ticks, lwd = 0.16, xpd = NA)
-        if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb) {
+        if (bin_bp %in% c(1000, 5000) && !suppress_label_50kb && fit_50kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(base_x - len_50k - label_offset_mid, yk,
             labels = lab,
@@ -2036,7 +2159,7 @@ draw_ruler_inter <- function(left_side, top, w, A,
         }
       } else if (at_10kb) {
         segments(base_x, yk, base_x - len_10k, yk, col = col_ticks, lwd = 0.14, xpd = NA)
-        if (bin_bp <= 5000 && !suppress_label_10kb) {
+        if (bin_bp <= 5000 && !suppress_label_10kb && fit_10kb) {
           lab <- prettyNum(coord_bp, big.mark = ",", scientific = FALSE, preserve.width = "none")
           text(base_x - len_10k - label_offset_mid, yk,
             labels = lab,
@@ -2285,17 +2408,41 @@ draw_bed_inter <- function(
     }
   }
 
-  process_axis(bed_data, axis, axis_start, axis_len)
+  # axis_len spans bin STARTS; add a bin so the filter and the clip inside
+  # reach the true right edge of the plotted region
+  process_axis(bed_data, axis, axis_start, axis_len + bin_size)
 }
 
 draw_contacts_inter <- function(A, C, left_side, bedpe, top, w) {
   n_rows <- nrow(A)
   n_cols <- ncol(A)
+
+  # Values that resolve to the page-background color (white) should be skipped
+  white_rows <- which(toupper(rownames(C)) %in% c("WHITE", "#FFFFFF"))
+  if (length(white_rows)) {
+    brk     <- C[, "breaks"]
+    lo_i    <- min(white_rows); hi_i <- max(white_rows)
+    skip_lo <- if (lo_i == 1L)     -Inf else (brk[lo_i - 1L] + brk[lo_i]) / 2
+    skip_hi <- if (hi_i == nrow(C)) Inf else (brk[hi_i] + brk[hi_i + 1L]) / 2
+  } else {
+    skip_lo <- 0; skip_hi <- 0   # fallback: behaves like == 0
+  }
+
+  # draw background white footprint
+  rect(
+    left_side,                 # xleft
+    top - n_rows * w,          # ybottom
+    left_side + n_cols * w,    # xright
+    top,                       # ytop
+    col = "white", border = "#eeeeee", lwd = 0.08
+  )
  
   # Draw contact matrix
   for (i in 1:n_rows) {
     for (j in 1:n_cols) {
-      color <- rownames(C[order(abs(C[, "breaks"] - A[i, j]), decreasing = FALSE), ])[1]
+      val <- A[i, j]
+      if (is.na(val) || (val >= skip_lo && val <= skip_hi)) next
+      color <- rownames(C[order(abs(C[, "breaks"] - val), decreasing = FALSE), ])[1]
       rect(
         left_side + (j - 1) * w,
         top - (i - 1) * w,
@@ -2315,26 +2462,29 @@ draw_contacts_inter <- function(A, C, left_side, bedpe, top, w) {
   legend_out <- NULL
  
   if (!identical(bedpe, "FALSE")) {
-    prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color)
-    pairs_list  <- prep$pairs_list
+    prep <- prep_bedpe_layers(bedpe, bedpe_color_param = bedpe_color,
+                              bedpe_lwd_param = bedpe_lwd)
+    pairs_list   <- prep$pairs_list
     bedpe_colors <- prep$color_map
- 
+    bedpe_lwds   <- prep$lwd_map
+
     for (nm in names(pairs_list)) {
       pairs <- pairs_list[[nm]]
       if (is.null(pairs) || nrow(pairs) == 0L) next
-      bedpe_col <- unname(bedpe_colors[[nm]])
- 
+      bedpe_col      <- unname(bedpe_colors[[nm]])
+      bedpe_lwd_this <- unname(bedpe_lwds[[nm]])
+
       for (p in seq_len(nrow(pairs))) {
         x1 <- left_side + (pairs$i[p] - 1) * w
         y1 <- top - (pairs$j[p] - 1) * w
         x2 <- left_side + (pairs$i_end[p]) * w
         y2 <- top - (pairs$j_end[p]) * w
- 
+
         rect(
           x1, y1, x2, y2,
           border = bedpe_col,
           col = NA,
-          lwd = 0.8
+          lwd = bedpe_lwd_this
         )
       }
     }
@@ -2451,8 +2601,8 @@ draw_default_annotations_inter <- function(
     bedpe          = "FALSE",    # bedpe list/data.frame or "FALSE"
     pairs          = NULL,       # parsed pairs data.frame
     flip_axes      = FALSE,      # whether axes were flipped
-    new_interval_chr1 = NULL,    # chr for axis 1 (needed for bedpe check)
-    new_interval_chr2 = NULL,    # chr for axis 2 (needed for bedpe check)
+    new_interval_chr1 = NULL,    # chr for axis 1
+    new_interval_chr2 = NULL,    # chr for axis 2
     depth          = 2.5,        # gap between ruler baseline and first gene lane
     label_genes    = TRUE,
     merge_exons    = TRUE,
@@ -2504,13 +2654,14 @@ draw_default_annotations_inter <- function(
     map_pos <- function(bp) {
       left_side + (bp - interval_start) / bin_size * w
     }
-    scale_factor <- (n_cols * w) / interval_len
   } else {
     map_pos <- function(bp) {
       top - (bp - interval_start) / bin_size * w
     }
-    scale_factor <- (n_rows * w) / interval_len
   }
+
+  # user-space units per bp
+  scale_factor <- w / bin_size
 
   # ---- BEDPE dimming helper ----
   is_gene_in_bedpe_for_axis <- function(gene_start, gene_end) {
@@ -2773,6 +2924,7 @@ render_inter_plot <- function(
     ann_style         = "standard",
     ann_custom        = "NONE",
     ann_custom_colors = "NONE",
+    ann_custom_labels = "NONE",
     genome_build      = "hg38",
     bin_size,
     new_interval_chr1,
@@ -2786,7 +2938,7 @@ render_inter_plot <- function(
     flip_axes         = FALSE,
     pairs             = NULL,
     flag_profiles     = FALSE,
-    data_dir          = path.expand("~/lab-data")
+    data_dir          = Sys.getenv("LAB_DATA_DIR", file.path(Sys.getenv("HOME"), "lab-data"))
   ) {
 
   # Constants
@@ -2822,10 +2974,9 @@ render_inter_plot <- function(
     xlab = NA, ylab = NA, xaxt = "n", yaxt = "n", bty = "n", asp = 1
   )
 
-  # Title
   draw_title_inter(
-    new_interval_chr1, interval_start1, interval_end1,
-    new_interval_chr2, interval_start2, interval_end2
+    new_interval_chr1, interval_start1, interval_end1 + bin_size,
+    new_interval_chr2, interval_start2, interval_end2 + bin_size
   )
 
   # Scale bar
@@ -2885,6 +3036,9 @@ render_inter_plot <- function(
   custom_annotation_files <- c()
   custom_final_colors     <- c()
 
+  custom_x_skipped <- 0L
+  custom_y_skipped <- 0L
+
   if (!identical(ann_custom, "NONE") && nzchar(ann_custom)) {
     cat("\nDrawing custom annotations for", genome_build, "\n")
     custom_annotation_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
@@ -2894,101 +3048,167 @@ render_inter_plot <- function(
     custom_final_colors <- resolve_custom_colors(
       ann_custom_colors, n_files, base_colors = inter_base_colors
     )
+    custom_label_flags <- resolve_custom_labels(ann_custom_labels, n_files)
 
-    # First pass: draw custom tracks
-    x_depth <- base_depth_custom_x
-    y_depth <- base_depth_custom_y
+    # bp -> user coords, matching draw_feature_inter
+    map_pos_x <- function(bp) {
+      left_side_contact + (bp - interval_start1) / bin_size * w
+    }
+    map_pos_y <- function(bp) {
+      top - (bp - interval_start2) / bin_size * w
+    }
+    scale_factor_x <- w / bin_size
+    scale_factor_y <- w / bin_size
 
-    for (i in seq_along(custom_annotation_files)) {
-      current_file <- custom_annotation_files[i]
-      this_color   <- custom_final_colors[i]
-
-      bed_tmp <- read.table(current_file, as.is = TRUE, header = FALSE)
-      has_x <- any(bed_tmp[, 1] == new_interval_chr1 &
-                    bed_tmp[, 2] < interval_end1 &
-                    bed_tmp[, 3] > interval_start1)
-      has_y <- any(bed_tmp[, 1] == new_interval_chr2 &
-                    bed_tmp[, 2] < interval_end2 &
-                    bed_tmp[, 3] > interval_start2)
-
-      if (has_x) {
-        custom_x_depths <- c(custom_x_depths, x_depth)
-        draw_bed_inter(
-          current_file, this_color, x_depth, FALSE, w, top, "x",
-          interval_start1, interval_len1, interval_start2, interval_len2,
-          plot_width = NULL, plot_height = NULL, left_side_contact
-        )
-        x_depth <- x_depth + step_depth
+    # Dim features that miss every bedpe foot, as the default track does
+    custom_dim_x <- NULL
+    custom_dim_y <- NULL
+    if (!identical(bedpe, "FALSE") && is.list(bedpe) && length(bedpe)) {
+      custom_dim_x <- function(s, e) {
+        is_gene_in_bedpe_inter(new_interval_chr1, s, e, "x", bedpe, flip_axes)
       }
-
-      if (has_y) {
-        custom_y_depths <- c(custom_y_depths, y_depth)
-        draw_bed_inter(
-          current_file, this_color, y_depth, FALSE, w, top, "y",
-          interval_start1, interval_len1, interval_start2, interval_len2,
-          plot_width = NULL, plot_height = NULL, left_side_contact
-        )
-        y_depth <- y_depth + step_depth
+      custom_dim_y <- function(s, e) {
+        is_gene_in_bedpe_inter(new_interval_chr2, s, e, "y", bedpe, flip_axes)
       }
     }
 
-    if (length(custom_x_depths) > 0) max_custom_x_depth <- max(custom_x_depths)
-    if (length(custom_y_depths) > 0) max_custom_y_depth <- max(custom_y_depths)
+    # Plan first: a file may hit one axis, both, or neither, and labeled tracks
+    # grow with their label lanes, so each axis gets its own depths and extent
+    drawn_any    <- logical(n_files)
+    x_depths     <- rep(NA_real_, n_files)
+    y_depths     <- rep(NA_real_, n_files)
+    x_plans      <- vector("list", n_files)
+    y_plans      <- vector("list", n_files)
+
+    x_cursor <- base_depth_custom_x
+    y_cursor <- base_depth_custom_y
+
+    for (i in seq_len(n_files)) {
+      current_file <- custom_annotation_files[i]
+      want_labels  <- custom_label_flags[i]
+
+      bed_x <- load_and_subset_custom_bed(
+        current_file, new_interval_chr1, interval_start1, interval_end1,
+        want_labels = want_labels
+      )
+      bed_y <- load_and_subset_custom_bed(
+        current_file, new_interval_chr2, interval_start2, interval_end2,
+        want_labels = want_labels
+      )
+
+      has_x <- !is.null(bed_x)
+      has_y <- !is.null(bed_y)
+      drawn_any[i] <- has_x || has_y
+
+      if (has_x) {
+        x_depths[i] <- x_cursor
+        custom_x_depths <- c(custom_x_depths, x_cursor)
+        if (want_labels) {
+          x_plans[[i]] <- plan_custom_track(bed_x, scale_factor_x)
+          x_cursor <- x_cursor + x_plans[[i]]$height + custom_ann_geom$file_gap
+        } else {
+          x_cursor <- x_cursor + step_depth
+        }
+      }
+
+      if (has_y) {
+        y_depths[i] <- y_cursor
+        custom_y_depths <- c(custom_y_depths, y_cursor)
+        if (want_labels) {
+          y_plans[[i]] <- plan_custom_track(bed_y, scale_factor_y)
+          y_cursor <- y_cursor + y_plans[[i]]$height + custom_ann_geom$file_gap
+        } else {
+          y_cursor <- y_cursor + step_depth
+        }
+      }
+    }
+
+    # Deepest point reached on each axis, as a depth away from the rectangle
+    axis_extent <- function(depths, plans) {
+      ext <- 0
+      for (i in seq_along(depths)) {
+        if (is.na(depths[i])) next
+        h <- if (is.null(plans[[i]])) 0 else plans[[i]]$height
+        ext <- max(ext, depths[i] + h)
+      }
+      ext
+    }
+    max_custom_x_depth <- axis_extent(x_depths, x_plans)
+    max_custom_y_depth <- axis_extent(y_depths, y_plans)
+
+    # Both passes go through here so the mask and the redraw stay in step
+    draw_all_custom_axis <- function(axis) {
+      depths   <- if (axis == "x") x_depths else y_depths
+      plans    <- if (axis == "x") x_plans else y_plans
+      map_pos  <- if (axis == "x") map_pos_x else map_pos_y
+      baseline <- if (axis == "x") rect_bottom else rect_left
+      dim_fun  <- if (axis == "x") custom_dim_x else custom_dim_y
+      boundary <- if (axis == "x") page_boundary_x else page_boundary_y
+
+      skipped <- 0L
+
+      for (i in seq_len(n_files)) {
+        if (is.na(depths[i])) next
+
+        if (is.null(plans[[i]])) {
+          draw_bed_inter(
+            custom_annotation_files[i], custom_final_colors[i],
+            depths[i], FALSE, w, top, axis,
+            interval_start1, interval_len1, interval_start2, interval_len2,
+            plot_width = NULL, plot_height = NULL, left_side_contact
+          )
+          next
+        }
+
+        res <- draw_custom_annotations(
+          bed           = plans[[i]]$bed,
+          color         = custom_final_colors[i],
+          axis          = axis,
+          map_pos       = map_pos,
+          baseline      = baseline,
+          depth         = depths[i],
+          feature_lwd   = 0.5,
+          show_guides   = FALSE,
+          dim_fun       = dim_fun,
+          page_boundary = boundary
+        )
+        skipped <- skipped + res$features_skipped
+      }
+
+      skipped
+    }
+
+    # First pass: draw custom tracks
+    if (length(custom_x_depths) > 0) draw_all_custom_axis("x")
+    if (length(custom_y_depths) > 0) draw_all_custom_axis("y")
 
     # White-box + redraw: X-axis custom
     if (length(custom_x_depths) > 0) {
       cust_x_bbox_top    <- rect_bottom - min(custom_x_depths) + 0.5
-      cust_x_bbox_bottom <- rect_bottom - max(custom_x_depths) - 0.5
+      cust_x_bbox_bottom <- rect_bottom - max_custom_x_depth - 0.5
 
       rect(xleft = rect_left - bbox_pad_x, ybottom = cust_x_bbox_bottom,
            xright = rect_right + bbox_pad_x, ytop = cust_x_bbox_top,
            col = "white", border = NA, xpd = NA)
 
-      x_depth_redraw <- base_depth_custom_x
-      for (i in seq_along(custom_annotation_files)) {
-        bed_tmp <- read.table(custom_annotation_files[i], as.is = TRUE, header = FALSE)
-        if (any(bed_tmp[, 1] == new_interval_chr1 &
-                bed_tmp[, 2] < interval_end1 &
-                bed_tmp[, 3] > interval_start1)) {
-          draw_bed_inter(
-            custom_annotation_files[i], custom_final_colors[i],
-            x_depth_redraw, FALSE, w, top, "x",
-            interval_start1, interval_len1, interval_start2, interval_len2,
-            plot_width = NULL, plot_height = NULL, left_side_contact
-          )
-          x_depth_redraw <- x_depth_redraw + step_depth
-        }
-      }
+      custom_x_skipped <- draw_all_custom_axis("x")
     }
 
     # White-box + redraw: Y-axis custom
     if (length(custom_y_depths) > 0) {
       cust_y_bbox_right <- rect_left - min(custom_y_depths) + 0.5
-      cust_y_bbox_left  <- rect_left - max(custom_y_depths) - 0.5
+      cust_y_bbox_left  <- rect_left - max_custom_y_depth - 0.5
 
       rect(xleft = cust_y_bbox_left, ybottom = rect_bottom - bbox_pad_y,
            xright = cust_y_bbox_right, ytop = rect_top + bbox_pad_y,
            col = "white", border = NA, xpd = NA)
 
-      y_depth_redraw <- base_depth_custom_y
-      for (i in seq_along(custom_annotation_files)) {
-        bed_tmp <- read.table(custom_annotation_files[i], as.is = TRUE, header = FALSE)
-        if (any(bed_tmp[, 1] == new_interval_chr2 &
-                bed_tmp[, 2] < interval_end2 &
-                bed_tmp[, 3] > interval_start2)) {
-          draw_bed_inter(
-            custom_annotation_files[i], custom_final_colors[i],
-            y_depth_redraw, FALSE, w, top, "y",
-            interval_start1, interval_len1, interval_start2, interval_len2,
-            plot_width = NULL, plot_height = NULL, left_side_contact
-          )
-          y_depth_redraw <- y_depth_redraw + step_depth
-        }
-      }
+      custom_y_skipped <- draw_all_custom_axis("y")
     }
 
     # Add custom tracks to legend
     for (i in seq_along(custom_annotation_files)) {
+      if (!drawn_any[i]) next
       custom_legend_labels <- c(custom_legend_labels, basename(custom_annotation_files[i]))
       custom_legend_colors <- c(custom_legend_colors, custom_final_colors[i])
       custom_legend_types  <- c(custom_legend_types, "line")
@@ -3068,7 +3288,7 @@ render_inter_plot <- function(
         page_boundary  = page_boundary_y
       ))
 
-      # First pass
+      # First pass: draw default tracks
       legend_info_x <- do.call(draw_default_annotations_inter, x_args)
       legend_info_y <- do.call(draw_default_annotations_inter, y_args)
 
@@ -3188,6 +3408,9 @@ render_inter_plot <- function(
   x_genes_skipped <- if (!is.null(legend_info_x)) legend_info_x$genes_skipped else 0L
   y_genes_skipped <- if (!is.null(legend_info_y)) legend_info_y$genes_skipped else 0L
 
+  x_genes_skipped <- x_genes_skipped + custom_x_skipped
+  y_genes_skipped <- y_genes_skipped + custom_y_skipped
+
   if (x_genes_skipped > 0L && !is.null(x_def_bbox_bottom)) {
     notice_w <- 22; notice_h <- 4
     notice_x_right  <- rect_right + bbox_pad_x
@@ -3202,7 +3425,7 @@ render_inter_plot <- function(
          lwd = 0.5, xpd = NA)
 
     text(notice_x_right - notice_w / 2, notice_y_center,
-      labels = sprintf("%d gene(s) omitted on x-axis\n(insufficient page space)",
+      labels = sprintf("%d annotation(s) omitted on x-axis\n(insufficient page space)",
                        x_genes_skipped),
       cex = 0.30, col = "#888888", xpd = NA)
   }
@@ -3221,7 +3444,7 @@ render_inter_plot <- function(
          lwd = 0.5, xpd = NA)
 
     text(notice_x_center, notice_y_bottom + notice_w / 2,
-      labels = sprintf("%d gene(s) omitted on y-axis\n(insufficient page space)",
+      labels = sprintf("%d annotation(s) omitted on y-axis\n(insufficient page space)",
                        y_genes_skipped),
       cex = 0.30, col = "#888888", srt = -90, xpd = NA)
   }
@@ -3237,7 +3460,7 @@ calculate_cap <- function(
   denMat,
   max_cap,
   quant_cut,
-  flag_inter = "FALSE"
+  flag_inter = FALSE
   ) {
   calculate_skewness <- function(values) {
     n <- length(values)
@@ -3325,10 +3548,10 @@ truncate_labels <- function(x, max_chars = 36L, use_unicode_ellipsis = TRUE) {
   x
 }
 
-prep_bedpe_layers <- function(bedpe, bedpe_color_param = "#000000") {
+prep_bedpe_layers <- function(bedpe, bedpe_color_param = "#000000", bedpe_lwd_param = "0.8") {
   # Case 1: No highlights
   if (identical(bedpe, "FALSE")) {
-    return(list(pairs_list = list(), color_map = character(0)))
+    return(list(pairs_list = list(), color_map = character(0), lwd_map = numeric(0)))
   }
   # Case 2: highlights
   if (is.list(bedpe)) {
@@ -3372,7 +3595,33 @@ prep_bedpe_layers <- function(bedpe, bedpe_color_param = "#000000") {
   }
 
   names(cols) <- nm
-  list(pairs_list = pairs_list, color_map = cols)
+
+  # ---- Line widths ----
+  # one value      -> applied to every layer
+  # exactly n      -> positional, layer i gets value i
+  # partial (2..n-1) -> positional for those given, last value fills the rest
+  # none / unparseable -> default 0.8 for all
+  lwd_toks <- unlist(strsplit(as.character(bedpe_lwd_param), "[[:space:]]+"))
+  lwd_toks <- lwd_toks[nzchar(lwd_toks)]
+  lwd_vals <- suppressWarnings(as.numeric(lwd_toks))
+  lwd_vals <- lwd_vals[!is.na(lwd_vals)]
+
+  if (length(lwd_vals) == 0L) {
+    lwds <- rep(0.8, n)
+  } else if (length(lwd_vals) == 1L) {
+    lwds <- rep(lwd_vals, n)
+  } else if (length(lwd_vals) >= n) {
+    lwds <- lwd_vals[seq_len(n)]
+  } else {
+    cat(sprintf(
+      "\nNote: %d bedpe layer(s) but %d line width(s) given; using (%s) for the rest...\n",
+      n, length(lwd_vals), lwd_vals[length(lwd_vals)]
+    ))
+    lwds <- c(lwd_vals, rep(lwd_vals[length(lwd_vals)], n - length(lwd_vals)))
+  }
+  names(lwds) <- nm
+
+  list(pairs_list = pairs_list, color_map = cols, lwd_map = lwds)
 }
 
 resolve_custom_colors <- function(ann_custom_colors, n_files,
@@ -3459,7 +3708,7 @@ merge_intervals <- function(df) {
 }
 
 assign_lanes <- function(df, label_cex = NULL, label_pad_in = NULL,
-                         scale_factor = NULL) {
+                         scale_factor = NULL, label_col = "gene") {
   if (!nrow(df)) return(df)
 
   use_labels <- !is.null(label_cex) && !is.null(label_pad_in) &&
@@ -3468,7 +3717,7 @@ assign_lanes <- function(df, label_cex = NULL, label_pad_in = NULL,
   if (use_labels) {
     # Widen packing envelope to include label footprint
     mid_bp <- (df$start + df$end) / 2
-    w_in   <- strwidth(df$gene, cex = label_cex, units = "inches")
+    w_in   <- strwidth(df[[label_col]], cex = label_cex, units = "inches")
 
     inch_to_bp <- function(dx_in) {
       dx_user <- diff(grconvertX(c(0, dx_in), from = "in", to = "user"))
@@ -3513,14 +3762,17 @@ load_and_subset_bed <- function(bed_file, interval_chr, interval_start, interval
   }
   colnames(bed) <- c("chr", "start", "end", "strand", "gene", "biotype")
 
+  interval_right_edge <- interval_end + bin_size
+
   in_view <- (bed$chr == interval_chr) &
-    (bed$start < interval_end) &
+    (bed$start < interval_right_edge) &
     (bed$end > interval_start)
   bed <- bed[in_view, , drop = FALSE]
   if (!nrow(bed)) return(NULL)
 
   bed$start <- pmax(bed$start, interval_start)
-  bed$end   <- pmin(bed$end, interval_end)
+  bed$end   <- pmin(bed$end, interval_right_edge)
+
   bed <- validate_intervals(bed)
   if (!nrow(bed)) return(NULL)
   unique(bed)
@@ -3541,15 +3793,18 @@ load_and_subset_alt_tss <- function(alt_tss_file, interval_chr,
   colnames(alt_raw)[1:7] <- c("chr", "start", "end", "gene", "biotype", "strand", "level")
   alt_raw$level <- suppressWarnings(as.integer(alt_raw$level))
 
+  interval_right_edge <- interval_end + bin_size
+
   alt_tss_tbl <- alt_raw[
     alt_raw$chr == interval_chr &
-      alt_raw$start < interval_end &
+      alt_raw$start < interval_right_edge &
       alt_raw$end > interval_start, , drop = FALSE
   ]
   if (!nrow(alt_tss_tbl)) return(NULL)
 
   alt_tss_tbl$start <- pmax(alt_tss_tbl$start, interval_start)
-  alt_tss_tbl$end   <- pmin(alt_tss_tbl$end, interval_end)
+  alt_tss_tbl$end   <- pmin(alt_tss_tbl$end, interval_right_edge)
+
   alt_tss_tbl <- validate_intervals(alt_tss_tbl)
   if (!nrow(alt_tss_tbl)) NULL else alt_tss_tbl
 }
@@ -3642,6 +3897,286 @@ prepare_exon_draw <- function(df, gx1_bp, gx2_bp, g, strand, bt, merge_exons) {
   }
 }
 
+# Geometry shared by every labeled custom track. The values mirror the
+# constants in draw_default_annotations so that the custom block and the
+# default block read as one system
+custom_ann_geom <- list(
+  feature_height = 0.25,
+  label_gap      = 0.40,
+  lane_gap       = 1.25,
+  label_cex      = 0.26,
+  label_pad_in   = 0.03,
+  base_lwd       = 0.4,
+  arrow_dx       = 0.20,
+  arrow_dy       = 0.14,
+  arrow_gap      = 0.30,
+  file_gap       = 0.90,
+  guide_col      = "#B2B2B2",
+  guide_lwd      = 0.2,
+  guide_lty      = "dotted",
+  label_family   = "DejaVu Sans Mono"
+)
+
+# Parse the per-file label flags that ride alongside --annotations_custom
+resolve_custom_labels <- function(ann_custom_labels, n_files) {
+  flags <- rep(FALSE, n_files)
+  if (is.null(ann_custom_labels) ||
+      is.na(ann_custom_labels) ||
+      identical(ann_custom_labels, "NONE") ||
+      !nzchar(ann_custom_labels)) {
+    return(flags)
+  }
+  toks <- strsplit(ann_custom_labels, "[[:space:]]+")[[1]]
+  toks <- toks[nzchar(toks)]
+  n <- min(length(toks), n_files)
+  if (n > 0L) flags[seq_len(n)] <- toupper(toks[seq_len(n)]) == "TRUE"
+  flags
+}
+
+# Read a custom BED and normalize it to chr/start/end/name/strand
+load_and_subset_custom_bed <- function(bed_file, interval_chr,
+                                       interval_start, interval_end,
+                                       want_labels = FALSE) {
+  if (!file.exists(bed_file)) return(NULL)
+
+  # quote/comment.char off so "#" and quotes inside names survive
+  bed <- tryCatch(
+    read.table(bed_file, header = FALSE, as.is = TRUE,
+               quote = "", comment.char = "", fill = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(bed) || !nrow(bed) || ncol(bed) < 3L) {
+    cat(sprintf("Warning: could not read custom bed %s\n", basename(bed_file)))
+    return(NULL)
+  }
+
+  chr   <- as.character(bed[[1]])
+  start <- suppressWarnings(as.numeric(bed[[2]]))
+  end   <- suppressWarnings(as.numeric(bed[[3]]))
+
+  # Drop header, preamble and malformed rows 
+  keep <- !is.na(chr) & is.finite(start) & is.finite(end)
+  if (!any(keep)) return(NULL)
+  bed <- bed[keep, , drop = FALSE]
+
+  out <- data.frame(
+    chr    = chr[keep],
+    start  = start[keep],
+    end    = end[keep],
+    name   = NA_character_,
+    strand = NA_character_,
+    stringsAsFactors = FALSE
+  )
+
+  # Feature name; "." and empty mean this row carries no label
+  if (isTRUE(want_labels) && ncol(bed) >= 4L) {
+    nm <- trimws(as.character(bed[[4]]))
+    nm[is.na(nm) | nm == "." | !nzchar(nm)] <- NA_character_
+    out$name <- nm
+  }
+
+  # Strand, but only when column 6 really looks like a strand column
+  if (isTRUE(want_labels) && ncol(bed) >= 6L) {
+    st <- trimws(as.character(bed[[6]]))
+    if (all(st %in% c("+", "-", "."), na.rm = TRUE)) {
+      st[is.na(st) | st == "."] <- NA_character_
+      out$strand <- st
+    }
+  }
+
+  interval_right_edge <- interval_end + bin_size
+
+  in_view <- out$chr == interval_chr &
+    out$start < interval_right_edge &
+    out$end > interval_start
+  in_view[is.na(in_view)] <- FALSE
+
+  out <- out[in_view, , drop = FALSE]
+  if (!nrow(out)) return(NULL)
+
+  out$start <- pmax(out$start, interval_start)
+  out$end   <- pmin(out$end, interval_right_edge)
+
+  out <- validate_intervals(out)
+  if (!nrow(out)) return(NULL)
+
+  # Repeated rows would otherwise each claim their own lane
+  unique(out)
+}
+
+# Pack a custom track into lanes and report how far below the baseline it runs
+plan_custom_track <- function(bed, scale_factor,
+                              show_labels = TRUE,
+                              geom = custom_ann_geom) {
+  labels_present <- isTRUE(show_labels) && any(!is.na(bed$name))
+
+  if (labels_present) {
+    bed$pack_label <- ifelse(is.na(bed$name), "", bed$name)
+    bed <- assign_lanes(bed, geom$label_cex, geom$label_pad_in,
+                        scale_factor, label_col = "pack_label")
+  } else {
+    bed <- assign_lanes(bed)
+  }
+
+  n_lanes <- if (nrow(bed)) max(bed$lane) else 1L
+
+  # Rotated or not, a label's footprint across the depth axis is its height
+  label_extent <- 0
+  if (labels_present) {
+    lab <- bed$pack_label[nzchar(bed$pack_label)]
+    if (length(lab)) {
+      label_extent <- max(strheight(lab, cex = geom$label_cex, units = "user"),
+                          na.rm = TRUE)
+    }
+  }
+
+  height <- (n_lanes - 1L) * geom$lane_gap + geom$feature_height / 2
+  if (labels_present) height <- height + geom$label_gap + label_extent
+
+  list(bed = bed, n_lanes = n_lanes, height = height,
+       labels_present = labels_present)
+}
+
+draw_custom_annotations <- function(bed, color, axis, map_pos, baseline, depth,
+                                    geom = custom_ann_geom,
+                                    show_labels = TRUE,
+                                    show_arrows = TRUE,
+                                    show_guides = TRUE,
+                                    feature_lwd = 0.8,
+                                    dim_fun = NULL,
+                                    page_boundary = -Inf) {
+  old_xpd <- par("xpd")
+  on.exit(par(xpd = old_xpd), add = TRUE)
+  par(xpd = NA)
+
+  fh <- geom$feature_height
+  min_extent <- Inf
+  skipped <- 0L
+
+  for (k in seq_len(nrow(bed))) {
+    s_bp   <- bed$start[k]
+    e_bp   <- bed$end[k]
+    lane   <- if (is.null(bed$lane)) 1L else bed$lane[k]
+    nm     <- bed$name[k]
+    strand <- bed$strand[k]
+
+    p1 <- map_pos(s_bp)
+    p2 <- map_pos(e_bp)
+    if (!is.finite(p1) || !is.finite(p2)) next
+
+    # Dim features that miss every bedpe foot
+    col_k <- color
+    if (!is.null(dim_fun) && !isTRUE(dim_fun(s_bp, e_bp))) {
+      col_k <- grDevices::adjustcolor(color, alpha.f = 0.40)
+    }
+
+    draw_label <- isTRUE(show_labels) && !is.na(nm) && nzchar(nm)
+    draw_arrow <- isTRUE(show_arrows) && !is.na(strand) && strand %in% c("+", "-")
+
+    lane_offset <- depth + (lane - 1L) * geom$lane_gap
+
+    if (axis == "x") {
+      y_feat  <- baseline - lane_offset
+      y_label <- y_feat - fh / 2 - geom$label_gap
+
+      if (is.finite(page_boundary) && y_label < page_boundary) {
+        skipped <- skipped + 1L
+        next
+      }
+
+      segments(min(p1, p2), y_feat, max(p1, p2), y_feat,
+        col = col_k, lwd = feature_lwd, xpd = NA, lend = "butt"
+      )
+
+      # Dotted guides from each end of the feature up to the contact plot
+      if (isTRUE(show_guides)) {
+        segments(c(p1, p2), y_feat, c(p1, p2), baseline,
+          col = geom$guide_col, lwd = geom$guide_lwd,
+          lty = geom$guide_lty, xpd = NA
+        )
+      }
+
+      if (draw_arrow) {
+        sgn    <- if (strand == "-") -1 else 1
+        tip_bp <- if (sgn > 0) e_bp else s_bp
+        tip_x  <- map_pos(tip_bp) + sgn * geom$arrow_gap
+        segments(tip_x - sgn * geom$arrow_dx, y_feat - geom$arrow_dy,
+          tip_x, y_feat, col = col_k, lwd = 0.4, xpd = NA
+        )
+        segments(tip_x - sgn * geom$arrow_dx, y_feat + geom$arrow_dy,
+          tip_x, y_feat, col = col_k, lwd = 0.4, xpd = NA
+        )
+      }
+
+      if (draw_label) {
+        text((p1 + p2) / 2, y_label,
+          labels = nm, col = col_k,
+          cex = geom$label_cex, xpd = NA, family = geom$label_family
+        )
+        min_extent <- min(min_extent,
+          y_label - strheight(nm, cex = geom$label_cex, units = "user"))
+      } else {
+        min_extent <- min(min_extent, y_feat - fh / 2)
+      }
+    } else {
+      x_feat  <- baseline - lane_offset
+      x_label <- x_feat - fh / 2 - geom$label_gap
+
+      if (is.finite(page_boundary) && x_label < page_boundary) {
+        skipped <- skipped + 1L
+        next
+      }
+
+      segments(x_feat, min(p1, p2), x_feat, max(p1, p2),
+        col = col_k, lwd = feature_lwd, xpd = NA, lend = "butt"
+      )
+
+      # Dotted guides from each end of the feature across to the contact plot
+      if (isTRUE(show_guides)) {
+        segments(x_feat, c(p1, p2), baseline, c(p1, p2),
+          col = geom$guide_col, lwd = geom$guide_lwd,
+          lty = geom$guide_lty, xpd = NA
+        )
+      }
+
+      if (draw_arrow) {
+        # map_pos inverts bp on the y axis, so "+" runs downward
+        if (strand == "-") {
+          tip_y <- map_pos(s_bp) + geom$arrow_gap
+          segments(x_feat - geom$arrow_dy, tip_y - geom$arrow_dx,
+            x_feat, tip_y, col = col_k, lwd = 0.4, xpd = NA
+          )
+          segments(x_feat + geom$arrow_dy, tip_y - geom$arrow_dx,
+            x_feat, tip_y, col = col_k, lwd = 0.4, xpd = NA
+          )
+        } else {
+          tip_y <- map_pos(e_bp) - geom$arrow_gap
+          segments(x_feat - geom$arrow_dy, tip_y + geom$arrow_dx,
+            x_feat, tip_y, col = col_k, lwd = 0.4, xpd = NA
+          )
+          segments(x_feat + geom$arrow_dy, tip_y + geom$arrow_dx,
+            x_feat, tip_y, col = col_k, lwd = 0.4, xpd = NA
+          )
+        }
+      }
+
+      if (draw_label) {
+        text(x_label, (p1 + p2) / 2,
+          labels = nm, col = col_k, cex = geom$label_cex,
+          srt = -90, xpd = NA, family = geom$label_family
+        )
+        min_extent <- min(min_extent,
+          x_label - strheight(nm, cex = geom$label_cex, units = "user"))
+      } else {
+        min_extent <- min(min_extent, x_feat - fh / 2)
+      }
+    }
+  }
+
+  if (!is.finite(min_extent)) min_extent <- NA_real_
+  invisible(list(min_extent = min_extent, features_skipped = skipped))
+}
+
 build_annotation_legend_info <- function(genes_skipped, min_extent) {
   list(
     labels = c("protein coding", "lncRNA", "miRNA"),
@@ -3692,19 +4227,27 @@ if (isFALSE(flag_inter)) {
     output_name         <- Args[23]
     bedpe               <- Args[24]
     bedpe_color         <- sprintf("#%s", Args[25])
-    inherent            <- as.logical(Args[26])
-    sample_dir          <- Args[27]
-    flag_w              <- Args[28]
-    inh_col_floor       <- sprintf("#%s", Args[29])
-    inh_col_off         <- sprintf("#%s", Args[30])
-    inh_col_on          <- sprintf("#%s", Args[31])
-    inh_col_ceil        <- sprintf("#%s", Args[32])
-    flag_matrix         <- as.logical(Args[33])
-    flag_plexus         <- as.logical(Args[34])
-    flag_expand_viewport <- as.logical(Args[35])
+    bedpe_lwd           <- Args[26]
+    inherent            <- as.logical(Args[27])
+    sample_dir          <- Args[28]
+    flag_w              <- Args[29]
+    inh_col_floor       <- sprintf("#%s", Args[30])
+    inh_col_off         <- sprintf("#%s", Args[31])
+    inh_col_on          <- sprintf("#%s", Args[32])
+    inh_col_ceil        <- sprintf("#%s", Args[33])
+    flag_matrix         <- as.logical(Args[34])
+    flag_plexus         <- as.logical(Args[35])
+    flag_expand_viewport <- as.logical(Args[36])
+    ann_custom_labels   <- Args[37]
 
     output_name <- basename(path.expand(output_name))
     out_path <- file.path(out_dir, output_name)
+
+    # coordinates to bins
+    b_view              <- interval_to_bins(interval_start, interval_end, bin_size)
+    interval_start      <- b_view$first * bin_size
+    interval_end        <- b_view$last  * bin_size
+    interval_right_edge <- bins_to_bp(b_view, bin_size)[2]
 
     interval_len <- interval_end - interval_start
 
@@ -3729,14 +4272,25 @@ if (isFALSE(flag_inter)) {
         bedpe_files <- if (length(bedpe) == 1L) strsplit(bedpe, "[[:space:]]+")[[1]] else bedpe
         bedpe_files <- bedpe_files[nzchar(bedpe_files)]
 
-        # Pre-allocate list (names are basenames of files)
+        # Pre-allocate list of basenames
         pairs_by_file <- setNames(vector("list", length(bedpe_files)), basename(bedpe_files))
 
         n_bedpe <- length(bedpe_files) # original number of bedpe files provided
         k <- 0L # number of bedpe files that have >=1 pair fully in-range
 
-        for (bedpe_path in bedpe_files) {
-          pairs <- read.table(bedpe_path, as.is = TRUE)[, 1:6]
+        for (idx in seq_along(bedpe_files)) {
+          bedpe_path <- bedpe_files[idx]
+
+          # Empty files are skipped
+          pairs <- tryCatch(
+            read.table(bedpe_path, as.is = TRUE),
+            error = function(e) NULL
+          )
+          if (is.null(pairs) || nrow(pairs) == 0) {
+            next
+          }
+
+          pairs <- pairs[, 1:6]
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
 
           if (sum(grepl("chr", pairs$chr1)) == 0) {
@@ -3746,31 +4300,29 @@ if (isFALSE(flag_inter)) {
             pairs$chr2 <- paste0("chr", pairs$chr2)
           }
 
-          # BEDPE is typically half-open [start, end).
-          # Convert to an inclusive end coordinate [start, end-1]
-          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
-          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
-
           # STRICT: require both anchors fully contained in the plot interval
           pairs <- pairs[pairs[, "chr1"] == interval_chr, ]
           pairs <- pairs[
-            pairs[, "end2"] <= interval_end &
-              pairs[, "start1"] >= interval_start &
-              pairs[, "end1"] <= interval_end &
-              pairs[, "start2"] >= interval_start,
+            pairs[, "start1"] >= interval_start &
+              pairs[, "end1"] <= interval_right_edge &
+              pairs[, "start2"] >= interval_start &
+              pairs[, "end2"] <= interval_right_edge,
           ]
+
+          pairs <- pairs[pairs$chr1 %in% c(paste0(rep("chr", 22), 1:22), "chrX", "chrY"), ]
 
           if (nrow(pairs) == 0) {
             next # no rows from this file in range, skip
           }
 
-          pairs <- pairs[pairs$chr1 %in% c(paste0(rep("chr", 22), 1:22), "chrX", "chrY"), ]
-
           # convert coordinates to bins
-          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
-          pairs$end1_bin <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
-          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
-          pairs$end2_bin <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
+          b1 <- interval_to_bins(pairs$start1, pairs$end1, bin_size)
+          b2 <- interval_to_bins(pairs$start2, pairs$end2, bin_size)
+
+          pairs$start1_bin <- as.integer(b1$first * bin_size)
+          pairs$end1_bin   <- as.integer(b1$last  * bin_size)
+          pairs$start2_bin <- as.integer(b2$first * bin_size)
+          pairs$end2_bin   <- as.integer(b2$last  * bin_size)
 
           for (i in 1:nrow(pairs)) {
             if (pairs[i, "start2_bin"] < pairs[i, "start1_bin"]) {
@@ -3796,12 +4348,13 @@ if (isFALSE(flag_inter)) {
           pairs$i_end <- (pairs$end1_bin - interval_start) / bin_size + 1
           pairs$j_end <- (pairs$end2_bin - interval_start) / bin_size + 1
 
-          pairs_by_file[[basename(bedpe_path)]] <- pairs
+          pairs_by_file[[idx]] <- pairs
           k <- k + 1L
         }
 
         # Keep only files that actually contributed pairs
-        pairs_by_file <- pairs_by_file[vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))]
+        keep_mask <- vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))
+        pairs_by_file <- pairs_by_file[keep_mask]
 
         # Update bedpe count to reflect only files in range
         n_bedpe <- length(pairs_by_file)
@@ -3811,6 +4364,20 @@ if (isFALSE(flag_inter)) {
           bedpe <- "FALSE"
         } else {
           bedpe <- pairs_by_file
+
+          # Keep colors paired with the files that survived filtering
+          bedpe_toks      <- strsplit(bedpe_color, "[[:space:]]+")[[1]]
+          bedpe_toks      <- bedpe_toks[nzchar(bedpe_toks)]
+          surviving_color <- bedpe_toks[which(keep_mask)]
+          surviving_color <- surviving_color[!is.na(surviving_color)]
+          bedpe_color     <- if (length(surviving_color)) paste(surviving_color, collapse = " ") else "#000000"
+
+          # Keep line widths paired with the files that survived filtering
+          lwd_toks      <- strsplit(as.character(bedpe_lwd), "[[:space:]]+")[[1]]
+          lwd_toks      <- lwd_toks[nzchar(lwd_toks)]
+          surviving_lwd <- lwd_toks[which(keep_mask)]
+          surviving_lwd <- surviving_lwd[!is.na(surviving_lwd)]
+          bedpe_lwd     <- if (length(surviving_lwd)) paste(surviving_lwd, collapse = " ") else "0.8"
         }
       }
     }
@@ -3821,7 +4388,6 @@ if (isFALSE(flag_inter)) {
     cat(sprintf("  interval_end:   %d\n", interval_end))
 
     ## 'chr' prefix handler:
-
     hic_A_chroms <- readHicChroms(path_hic)$name
 
     if (sum(grepl("chr", hic_A_chroms)) > 0) {
@@ -3838,7 +4404,6 @@ if (isFALSE(flag_inter)) {
     }
 
     ## CPM or AQuA factors
-
     mergeStats_A <- read.table(path_mgs, as.is = T)
     spikeVar <- ncol(mergeStats_A)
     hg_total1 <- as.numeric(mergeStats_A["valid_interaction_rmdup", 1])
@@ -3915,6 +4480,7 @@ if (isFALSE(flag_inter)) {
       cat("\n No contact values found for this interval\n")
       quit(save = "no", status = 1)
     }
+    
     # Bin coords for expanded plot if expand_viewport = true
     bin_coords <- seq(plot_start, plot_end, by = bin_size)
 
@@ -4040,6 +4606,31 @@ if (isFALSE(flag_inter)) {
       valid_custom_files <- preflight_custom_beds(ann_custom, interval_chr, interval_start, interval_end)
       n_bed <- length(valid_custom_files)
       n_custom <- n_bedpe + n_bed
+
+      # Keep user-assigned colors paired with the files that survived overlap
+      if (n_bed > 0 && !identical(ann_custom_colors, "NONE")) {
+        orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+        orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+        user_colors       <- strsplit(ann_custom_colors, "[[:space:]]+")[[1]]
+        user_colors       <- user_colors[nzchar(user_colors)]
+
+        surviving_colors  <- user_colors[match(valid_custom_files, orig_custom_files)]
+        surviving_colors  <- surviving_colors[!is.na(surviving_colors)]
+        ann_custom_colors <- if (length(surviving_colors)) paste(surviving_colors, collapse = " ") else "NONE"
+      }
+
+      # Keep the per-file label flags paired with those same survivors
+      if (n_bed > 0 && !identical(ann_custom_labels, "NONE")) {
+        orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+        orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+        user_labels       <- strsplit(ann_custom_labels, "[[:space:]]+")[[1]]
+        user_labels       <- user_labels[nzchar(user_labels)]
+
+        surviving_labels  <- user_labels[match(valid_custom_files, orig_custom_files)]
+        surviving_labels[is.na(surviving_labels)] <- "FALSE"
+        ann_custom_labels <- if (length(surviving_labels)) paste(surviving_labels, collapse = " ") else "NONE"
+      }
+
       ann_custom <- if (n_bed > 0) paste(valid_custom_files, collapse = " ") else "NONE"
 
       final_layout <- compute_final_layout(A_focus, w, n_custom)
@@ -4230,7 +4821,7 @@ if (isFALSE(flag_inter)) {
 
       breakList <- breaks
 
-      A_big <- A
+      A_big <-
       A_focus <- A_big[focus_start_idx:focus_end_idx,
         focus_start_idx:focus_end_idx,
         drop = FALSE
@@ -4268,6 +4859,31 @@ if (isFALSE(flag_inter)) {
       valid_custom_files <- preflight_custom_beds(ann_custom, interval_chr, interval_start, interval_end)
       n_bed <- length(valid_custom_files)
       n_custom <- n_bedpe + n_bed
+
+      # Keep user-assigned colors paired with the files that survived overlap
+      if (n_bed > 0 && !identical(ann_custom_colors, "NONE")) {
+        orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+        orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+        user_colors       <- strsplit(ann_custom_colors, "[[:space:]]+")[[1]]
+        user_colors       <- user_colors[nzchar(user_colors)]
+
+        surviving_colors  <- user_colors[match(valid_custom_files, orig_custom_files)]
+        surviving_colors  <- surviving_colors[!is.na(surviving_colors)]
+        ann_custom_colors <- if (length(surviving_colors)) paste(surviving_colors, collapse = " ") else "NONE"
+      }
+
+      # Keep the per-file label flags paired with those same survivors
+      if (n_bed > 0 && !identical(ann_custom_labels, "NONE")) {
+        orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+        orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+        user_labels       <- strsplit(ann_custom_labels, "[[:space:]]+")[[1]]
+        user_labels       <- user_labels[nzchar(user_labels)]
+
+        surviving_labels  <- user_labels[match(valid_custom_files, orig_custom_files)]
+        surviving_labels[is.na(surviving_labels)] <- "FALSE"
+        ann_custom_labels <- if (length(surviving_labels)) paste(surviving_labels, collapse = " ") else "NONE"
+      }
+
       ann_custom <- if (n_bed > 0) paste(valid_custom_files, collapse = " ") else "NONE"
 
       final_layout <- compute_final_layout(A_focus, w, n_custom)
@@ -4347,20 +4963,28 @@ if (isFALSE(flag_inter)) {
     output_name          <- Args[25]
     bedpe                <- Args[26]
     bedpe_color          <- sprintf("#%s", Args[27])
-    flag_w               <- Args[28]
-    sample_dirA          <- Args[29]
-    sample_dirB          <- Args[30]
-    flag_matrix          <- as.logical(Args[31])
-    inh_col_floor        <- sprintf("#%s", Args[32])
-    inh_col_off          <- sprintf("#%s", Args[33])
-    inh_col_on           <- sprintf("#%s", Args[34])
-    inh_col_ceil         <- sprintf("#%s", Args[35])
-    inherent             <- as.logical(Args[36])
-    flag_plexus          <- as.logical(Args[37])
-    flag_expand_viewport <- as.logical(Args[38])
+    bedpe_lwd            <- Args[28]
+    flag_w               <- Args[29]
+    sample_dirA          <- Args[30]
+    sample_dirB          <- Args[31]
+    flag_matrix          <- as.logical(Args[32])
+    inh_col_floor        <- sprintf("#%s", Args[33])
+    inh_col_off          <- sprintf("#%s", Args[34])
+    inh_col_on           <- sprintf("#%s", Args[35])
+    inh_col_ceil         <- sprintf("#%s", Args[36])
+    inherent             <- as.logical(Args[37])
+    flag_plexus          <- as.logical(Args[38])
+    flag_expand_viewport <- as.logical(Args[39])
+    ann_custom_labels    <- Args[40]
 
     output_name <- basename(path.expand(output_name))
     out_path <- file.path(out_dir, output_name)
+
+    # coordinates to bins
+    b_view              <- interval_to_bins(interval_start, interval_end, bin_size)
+    interval_start      <- b_view$first * bin_size
+    interval_end        <- b_view$last  * bin_size
+    interval_right_edge <- bins_to_bp(b_view, bin_size)[2]
 
     interval_len <- interval_end - interval_start
 
@@ -4385,14 +5009,24 @@ if (isFALSE(flag_inter)) {
         bedpe_files <- if (length(bedpe) == 1L) strsplit(bedpe, "[[:space:]]+")[[1]] else bedpe
         bedpe_files <- bedpe_files[nzchar(bedpe_files)]
 
-        # Pre-allocate list (names are basenames of files)
+        # Pre-allocate list of basenames
         pairs_by_file <- setNames(vector("list", length(bedpe_files)), basename(bedpe_files))
 
         n_bedpe <- length(bedpe_files) # original number of bedpe files provided
         k <- 0L # number of bedpe files that have >=1 pair fully in-range
 
-        for (bedpe_path in bedpe_files) {
-          pairs <- read.table(bedpe_path, as.is = TRUE)[, 1:6]
+        for (idx in seq_along(bedpe_files)) {
+          bedpe_path <- bedpe_files[idx]
+          # Empty (or otherwise unreadable) files are skipped
+          pairs <- tryCatch(
+            read.table(bedpe_path, as.is = TRUE),
+            error = function(e) NULL
+          )
+          if (is.null(pairs) || nrow(pairs) == 0) {
+            next
+          }
+          
+          pairs <- pairs[, 1:6]
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
 
           if (sum(grepl("chr", pairs$chr1)) == 0) {
@@ -4402,31 +5036,29 @@ if (isFALSE(flag_inter)) {
             pairs$chr2 <- paste0("chr", pairs$chr2)
           }
 
-          # BEDPE is typically half-open [start, end).
-          # Convert to an inclusive end coordinate [start, end-1]
-          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
-          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
-
           # STRICT: require both anchors fully contained in the plot interval
           pairs <- pairs[pairs[, "chr1"] == interval_chr, ]
           pairs <- pairs[
-            pairs[, "end2"] <= interval_end &
-              pairs[, "start1"] >= interval_start &
-              pairs[, "end1"] <= interval_end &
-              pairs[, "start2"] >= interval_start,
+            pairs[, "start1"] >= interval_start &
+              pairs[, "end1"] <= interval_right_edge &
+              pairs[, "start2"] >= interval_start &
+              pairs[, "end2"] <= interval_right_edge,
           ]
+
+          pairs <- pairs[pairs$chr1 %in% c(paste0(rep("chr", 22), 1:22), "chrX", "chrY"), ]
 
           if (nrow(pairs) == 0) {
             next # no rows from this file in range, skip
           }
 
-          pairs <- pairs[pairs$chr1 %in% c(paste0(rep("chr", 22), 1:22), "chrX", "chrY"), ]
-
           # convert coordinates to bins
-          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
-          pairs$end1_bin <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
-          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
-          pairs$end2_bin <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
+          b1 <- interval_to_bins(pairs$start1, pairs$end1, bin_size)
+          b2 <- interval_to_bins(pairs$start2, pairs$end2, bin_size)
+
+          pairs$start1_bin <- as.integer(b1$first * bin_size)
+          pairs$end1_bin   <- as.integer(b1$last  * bin_size)
+          pairs$start2_bin <- as.integer(b2$first * bin_size)
+          pairs$end2_bin   <- as.integer(b2$last  * bin_size)
 
           for (i in 1:nrow(pairs)) {
             if (pairs[i, "start2_bin"] < pairs[i, "start1_bin"]) {
@@ -4452,12 +5084,13 @@ if (isFALSE(flag_inter)) {
           pairs$i_end <- (pairs$end1_bin - interval_start) / bin_size + 1
           pairs$j_end <- (pairs$end2_bin - interval_start) / bin_size + 1
 
-          pairs_by_file[[basename(bedpe_path)]] <- pairs
+          pairs_by_file[[idx]] <- pairs
           k <- k + 1L
         }
 
         # Keep only files that actually contributed pairs
-        pairs_by_file <- pairs_by_file[vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))]
+        keep_mask <- vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))
+        pairs_by_file <- pairs_by_file[keep_mask]
 
         # Update bedpe count to reflect only files in range
         n_bedpe <- length(pairs_by_file)
@@ -4467,6 +5100,20 @@ if (isFALSE(flag_inter)) {
           bedpe <- "FALSE"
         } else {
           bedpe <- pairs_by_file
+
+          # Keep colors paired with the files that survived filtering
+          bedpe_toks      <- strsplit(bedpe_color, "[[:space:]]+")[[1]]
+          bedpe_toks      <- bedpe_toks[nzchar(bedpe_toks)]
+          surviving_color <- bedpe_toks[which(keep_mask)]
+          surviving_color <- surviving_color[!is.na(surviving_color)]
+          bedpe_color     <- if (length(surviving_color)) paste(surviving_color, collapse = " ") else "#000000"
+
+          # Keep line widths paired with the files that survived filtering
+          lwd_toks      <- strsplit(as.character(bedpe_lwd), "[[:space:]]+")[[1]]
+          lwd_toks      <- lwd_toks[nzchar(lwd_toks)]
+          surviving_lwd <- lwd_toks[which(keep_mask)]
+          surviving_lwd <- surviving_lwd[!is.na(surviving_lwd)]
+          bedpe_lwd     <- if (length(surviving_lwd)) paste(surviving_lwd, collapse = " ") else "0.8"
         }
       }
     }
@@ -4477,36 +5124,12 @@ if (isFALSE(flag_inter)) {
     cat(sprintf("  interval_end:   %d\n", interval_end))
 
     ## 'chr' prefix handler:
-
     hic_A_chroms <- readHicChroms(path_hic_A)$name
     hic_B_chroms <- readHicChroms(path_hic_B)$name
 
-    if (sum(grepl("chr", hic_A_chroms)) > 0 && sum(grepl("chr", hic_B_chroms)) > 0) {
-      flag_strip_chr <- "no"
-    }
-    if (sum(grepl("chr", hic_A_chroms)) > 0 && sum(grepl("chr", hic_B_chroms)) == 0) {
-      flag_strip_chr <- "A"
-    }
-    if (sum(grepl("chr", hic_B_chroms)) > 0 && sum(grepl("chr", hic_A_chroms)) == 0) {
-      flag_strip_chr <- "B"
-    }
-    if (sum(grepl("chr", hic_A_chroms)) == 0 && sum(grepl("chr", hic_B_chroms)) == 0) {
-      flag_strip_chr <- "yes"
-    }
-
-    if (flag_strip_chr == "yes") {
-      interval_chr_A <- sub("chr", "", interval_chr)
-      interval_chr_B <- sub("chr", "", interval_chr)
-    } else if (flag_strip_chr == "B") {
-      interval_chr_A <- interval_chr
-      interval_chr_B <- sub("chr", "", interval_chr)
-    } else if (flag_strip_chr == "A") {
-      interval_chr_A <- sub("chr", "", interval_chr)
-      interval_chr_B <- interval_chr
-    } else if (flag_strip_chr == "no") {
-      interval_chr_A <- interval_chr
-      interval_chr_B <- interval_chr
-    }
+    # Each sample's straw query uses that .hic's own chromosome names
+    interval_chr_A <- if (any(grepl("chr", hic_A_chroms))) interval_chr else sub("chr", "", interval_chr)
+    interval_chr_B <- if (any(grepl("chr", hic_B_chroms))) interval_chr else sub("chr", "", interval_chr)
 
     ## CPM or AQuA factors
     mergeStats_A <- read.table(path_mgs_A, as.is = T)
@@ -4635,9 +5258,32 @@ if (isFALSE(flag_inter)) {
     focus_len <- length(focus_bins)
 
     valid_custom_files <- preflight_custom_beds(ann_custom, interval_chr, interval_start, interval_end)
-
     n_bed <- length(valid_custom_files)
     n_custom <- n_bedpe + n_bed
+
+    # Keep user-assigned colors paired with the files that survived overlap
+    if (n_bed > 0 && !identical(ann_custom_colors, "NONE")) {
+      orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+      orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+      user_colors       <- strsplit(ann_custom_colors, "[[:space:]]+")[[1]]
+      user_colors       <- user_colors[nzchar(user_colors)]
+
+      surviving_colors  <- user_colors[match(valid_custom_files, orig_custom_files)]
+      surviving_colors  <- surviving_colors[!is.na(surviving_colors)]
+      ann_custom_colors <- if (length(surviving_colors)) paste(surviving_colors, collapse = " ") else "NONE"
+    }
+
+    # Keep the per-file label flags paired with those same survivors
+    if (n_bed > 0 && !identical(ann_custom_labels, "NONE")) {
+      orig_custom_files <- strsplit(ann_custom, "[[:space:]]+")[[1]]
+      orig_custom_files <- orig_custom_files[nzchar(orig_custom_files)]
+      user_labels       <- strsplit(ann_custom_labels, "[[:space:]]+")[[1]]
+      user_labels       <- user_labels[nzchar(user_labels)]
+
+      surviving_labels  <- user_labels[match(valid_custom_files, orig_custom_files)]
+      surviving_labels[is.na(surviving_labels)] <- "FALSE"
+      ann_custom_labels <- if (length(surviving_labels)) paste(surviving_labels, collapse = " ") else "NONE"
+    }
 
     ann_custom <- if (n_bed > 0) paste(valid_custom_files, collapse = " ") else "NONE"
 
@@ -4864,18 +5510,25 @@ if (isTRUE(flag_inter)) {
     output_name          <- Args[23]
     bedpe                <- Args[24]
     bedpe_color          <- sprintf("#%s", Args[25])
-    inherent             <- as.logical(Args[26])
-    sample_dir           <- Args[27]
-    flag_w               <- Args[28]
-    inh_col_floor        <- sprintf("#%s", Args[29])
-    inh_col_off          <- sprintf("#%s", Args[30])
-    inh_col_on           <- sprintf("#%s", Args[31])
-    inh_col_ceil         <- sprintf("#%s", Args[32])
-    flag_matrix          <- as.logical(Args[33])
-    flag_plexus          <- as.logical(Args[34])
-    flag_expand_viewport <- as.logical(Args[35])
-    orig_chr1            <- Args[36]
-    orig_chr2            <- Args[37]
+    bedpe_lwd            <- Args[26]
+    inherent             <- as.logical(Args[27])
+    sample_dir           <- Args[28]
+    flag_w               <- Args[29]
+    inh_col_floor        <- sprintf("#%s", Args[30])
+    inh_col_off          <- sprintf("#%s", Args[31])
+    inh_col_on           <- sprintf("#%s", Args[32])
+    inh_col_ceil         <- sprintf("#%s", Args[33])
+    flag_matrix          <- as.logical(Args[34])
+    flag_plexus          <- as.logical(Args[35])
+    flag_expand_viewport <- as.logical(Args[36])
+    ann_custom_labels    <- Args[37]
+    orig_range1            <- Args[38]
+    orig_range2            <- Args[39]
+
+    orig_chr1   <- strsplit(orig_range1, ":")[[1]][1]
+    orig_chr2   <- strsplit(orig_range2, ":")[[1]][1]
+    orig_start1 <- as.numeric(strsplit(orig_range1, ":")[[1]][2])
+    orig_start2 <- as.numeric(strsplit(orig_range2, ":")[[1]][2])
 
     output_name <- basename(path.expand(output_name))
     out_path <- file.path(out_dir, output_name)
@@ -4892,6 +5545,18 @@ if (isTRUE(flag_inter)) {
     interval_chr2 <- range_components[4]
     interval_start2 <- as.numeric(range_components[5])
     interval_end2 <- as.numeric(range_components[6])
+
+    # coordinates to bins
+    b_view1 <- interval_to_bins(interval_start1, interval_end1, bin_size)
+    b_view2 <- interval_to_bins(interval_start2, interval_end2, bin_size)
+
+    interval_start1 <- b_view1$first * bin_size
+    interval_end1   <- b_view1$last  * bin_size
+    interval_start2 <- b_view2$first * bin_size
+    interval_end2   <- b_view2$last  * bin_size
+
+    interval_right_edge1 <- bins_to_bp(b_view1, bin_size)[2]
+    interval_right_edge2 <- bins_to_bp(b_view2, bin_size)[2]
 
     interval_len1 <- interval_end1 - interval_start1
     interval_len2 <- interval_end2 - interval_start2
@@ -4918,7 +5583,11 @@ if (isTRUE(flag_inter)) {
     plot_width <- dimensions$width
     plot_height <- dimensions$height
 
-    flip_axes <- (orig_chr1 != interval_chr1)
+    if (orig_chr1 != orig_chr2) {
+      flip_axes <- (orig_chr1 != interval_chr1)
+    } else {
+      flip_axes <- (orig_start1 > orig_start2)
+    }
 
     if (flip_axes) {
       temp_val <- plot_width
@@ -4946,13 +5615,12 @@ if (isTRUE(flag_inter)) {
       flag_strip_chr <- TRUE
     }
 
-    if (flag_strip_chr) {
-      new_interval_chr1 <- sub("chr", "", interval_chr1)
-      new_interval_chr2 <- sub("chr", "", interval_chr2)
-    } else {
-      new_interval_chr1 <- interval_chr1
-      new_interval_chr2 <- interval_chr2
-    }
+    # straw needs the .hic's own chromosome names; BEDPEs, BEDs, genes and
+    # labels all use the chr-prefixed names from -R
+    straw_chr1 <- if (flag_strip_chr) sub("chr", "", interval_chr1) else interval_chr1
+    straw_chr2 <- if (flag_strip_chr) sub("chr", "", interval_chr2) else interval_chr2
+    new_interval_chr1 <- interval_chr1
+    new_interval_chr2 <- interval_chr2
 
     if (isFALSE(flag_matrix)) {
       if (bedpe != "FALSE") {
@@ -4966,8 +5634,18 @@ if (isTRUE(flag_inter)) {
         n_bedpe <- length(bedpe_files)
         k <- 0L
 
-        for (bedpe_path in bedpe_files) {
-          pairs <- read.table(bedpe_path, as.is = TRUE, header = FALSE)[, 1:6]
+        for (idx in seq_along(bedpe_files)) {
+          bedpe_path <- bedpe_files[idx]
+          # Empty (or otherwise unreadable) files are skipped
+          pairs <- tryCatch(
+            read.table(bedpe_path, as.is = TRUE),
+            error = function(e) NULL
+          )
+          if (is.null(pairs) || nrow(pairs) == 0) {
+            next
+          }
+          
+          pairs <- pairs[, 1:6]
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
 
           # Make sure chromosome names have 'chr' prefix
@@ -4979,13 +5657,13 @@ if (isTRUE(flag_inter)) {
           pairs <- pairs[
             (
               (pairs$chr1 == new_interval_chr1 &
-              pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
+              pairs$start1 >= interval_start1 & pairs$end1 <= interval_right_edge1 &
               pairs$chr2 == new_interval_chr2 &
-              pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
+              pairs$start2 >= interval_start2 & pairs$end2 <= interval_right_edge2) |
               (pairs$chr1 == new_interval_chr2 &
-              pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
+              pairs$start1 >= interval_start2 & pairs$end1 <= interval_right_edge2 &
               pairs$chr2 == new_interval_chr1 &
-              pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
+              pairs$start2 >= interval_start1 & pairs$end2 <= interval_right_edge1)
             ),
           ]
 
@@ -4994,23 +5672,21 @@ if (isTRUE(flag_inter)) {
           }
 
           # Reorder columns so chr1 always corresponds to interval 1
-          for (idx in 1:nrow(pairs)) {
-            if (pairs[idx, "chr1"] != new_interval_chr1) {
-              pairs[idx, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <-
-                pairs[idx, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
+          for (ri in seq_len(nrow(pairs))) {
+            if (pairs[ri, "chr1"] != new_interval_chr1) {
+              pairs[ri, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <-
+                pairs[ri, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
             }
           }
-          colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
-
-          # Adjust end coordinates for half-open binning
-          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
-          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
 
           # Convert coordinates to bins
-          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
-          pairs$end1_bin   <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
-          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
-          pairs$end2_bin   <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
+          b1 <- interval_to_bins(pairs$start1, pairs$end1, bin_size)
+          b2 <- interval_to_bins(pairs$start2, pairs$end2, bin_size)
+
+          pairs$start1_bin <- as.integer(b1$first * bin_size)
+          pairs$end1_bin   <- as.integer(b1$last  * bin_size)
+          pairs$start2_bin <- as.integer(b2$first * bin_size)
+          pairs$end2_bin   <- as.integer(b2$last  * bin_size)
 
           # Calculate plotting coordinates
           pairs$i     <- (pairs$start1_bin - interval_start1) / bin_size + 1
@@ -5027,13 +5703,15 @@ if (isTRUE(flag_inter)) {
             pairs$j_end <- tmp_i_end
           }
 
-          pairs_by_file[[basename(bedpe_path)]] <- pairs
+          pairs_by_file[[idx]] <- pairs
           k <- k + 1L
         }
 
         # Keep only files that actually contributed pairs
-        pairs_by_file <- pairs_by_file[vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))]
+        keep_mask <- vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))
+        pairs_by_file <- pairs_by_file[keep_mask]
 
+        # Update bedpe count to reflect only files in range
         n_bedpe <- length(pairs_by_file)
 
         if (n_bedpe == 0L) {
@@ -5041,6 +5719,20 @@ if (isTRUE(flag_inter)) {
           bedpe <- "FALSE"
         } else {
           bedpe <- pairs_by_file
+
+          # Keep colors paired with the files that survived filtering
+          bedpe_toks      <- strsplit(bedpe_color, "[[:space:]]+")[[1]]
+          bedpe_toks      <- bedpe_toks[nzchar(bedpe_toks)]
+          surviving_color <- bedpe_toks[which(keep_mask)]
+          surviving_color <- surviving_color[!is.na(surviving_color)]
+          bedpe_color     <- if (length(surviving_color)) paste(surviving_color, collapse = " ") else "#000000"
+
+          # Keep line widths paired with the files that survived filtering
+          lwd_toks      <- strsplit(as.character(bedpe_lwd), "[[:space:]]+")[[1]]
+          lwd_toks      <- lwd_toks[nzchar(lwd_toks)]
+          surviving_lwd <- lwd_toks[which(keep_mask)]
+          surviving_lwd <- surviving_lwd[!is.na(surviving_lwd)]
+          bedpe_lwd     <- if (length(surviving_lwd)) paste(surviving_lwd, collapse = " ") else "0.8"
         }
       }
     }
@@ -5110,8 +5802,8 @@ if (isTRUE(flag_inter)) {
     sparMat1 <- straw(
       norm,
       path_hic,
-      paste(new_interval_chr1, interval_start1, interval_end1, sep = ":"),
-      paste(new_interval_chr2, interval_start2, interval_end2, sep = ":"),
+      bins_to_query(straw_chr1, b_view1, bin_size),
+      bins_to_query(straw_chr2, b_view2, bin_size),
       unit,
       bin_size
     )
@@ -5125,12 +5817,12 @@ if (isTRUE(flag_inter)) {
 
     denMat1 <- matrix(
       data = 0,
-      nrow = length(seq(interval_start1, interval_end1, bin_size)),
-      ncol = length(seq(interval_start2, interval_end2, bin_size))
+      nrow = b_view1$n,
+      ncol = b_view2$n
     )
 
-    rownames(denMat1) <- seq(interval_start1, interval_end1, bin_size)
-    colnames(denMat1) <- seq(interval_start2, interval_end2, bin_size)
+    rownames(denMat1) <- bins_to_grid(b_view1, bin_size)
+    colnames(denMat1) <- bins_to_grid(b_view2, bin_size)
 
     # Populate denMat1
     for (i in 1:nrow(sparMat1)) {
@@ -5151,23 +5843,26 @@ if (isTRUE(flag_inter)) {
       tmp_start1 <- interval_start1
       tmp_end1 <- interval_end1
       tmp_len1 <- interval_len1
+      tmp_b1 <- b_view1
 
       new_interval_chr1 <- new_interval_chr2
       interval_start1 <- interval_start2
       interval_end1 <- interval_end2
       interval_len1 <- interval_len2
+      b_view1 <- b_view2
 
       new_interval_chr2 <- tmp_chr1
       interval_start2 <- tmp_start1
       interval_end2 <- tmp_end1
       interval_len2 <- tmp_len1
+      b_view2 <- tmp_b1
     }
 
     if (flag_matrix) {
 
       # first region given is x, second is y
-      row_coords <- seq(interval_start2, interval_end2, by = bin_size)
-      col_coords <- seq(interval_start1, interval_end1, by = bin_size)
+      row_coords <- bins_to_grid(b_view2, bin_size)
+      col_coords <- bins_to_grid(b_view1, bin_size)
 
       row_labels <- sprintf("%s:%d:%d", new_interval_chr2, row_coords, row_coords + bin_size - 1L)
       col_labels <- sprintf("%s:%d:%d", new_interval_chr1, col_coords, col_coords + bin_size - 1L)
@@ -5229,6 +5924,7 @@ if (isTRUE(flag_inter)) {
       ann_style         = ann_style,
       ann_custom        = ann_custom,
       ann_custom_colors = ann_custom_colors,
+      ann_custom_labels = ann_custom_labels,
       genome_build      = genome_build,
       bin_size          = bin_size,
       new_interval_chr1 = new_interval_chr1,
@@ -5281,19 +5977,26 @@ if (isTRUE(flag_inter)) {
     output_name          <- Args[25]
     bedpe                <- Args[26]
     bedpe_color          <- sprintf("#%s", Args[27])
-    flag_w               <- Args[28]
-    sample_dirA          <- Args[29]
-    sample_dirB          <- Args[30]
-    flag_matrix          <- as.logical(Args[31])
-    inh_col_floor        <- sprintf("#%s", Args[32])
-    inh_col_off          <- sprintf("#%s", Args[33])
-    inh_col_on           <- sprintf("#%s", Args[34])
-    inh_col_ceil         <- sprintf("#%s", Args[35])
-    inherent             <- as.logical(Args[36])
-    flag_plexus          <- as.logical(Args[37])
-    flag_expand_viewport <- as.logical(Args[38])
-    orig_chr1            <- Args[39]
-    orig_chr2            <- Args[40]
+    bedpe_lwd            <- Args[28]
+    flag_w               <- Args[29]
+    sample_dirA          <- Args[30]
+    sample_dirB          <- Args[31]
+    flag_matrix          <- as.logical(Args[32])
+    inh_col_floor        <- sprintf("#%s", Args[33])
+    inh_col_off          <- sprintf("#%s", Args[34])
+    inh_col_on           <- sprintf("#%s", Args[35])
+    inh_col_ceil         <- sprintf("#%s", Args[36])
+    inherent             <- as.logical(Args[37])
+    flag_plexus          <- as.logical(Args[38])
+    flag_expand_viewport <- as.logical(Args[39])
+    ann_custom_labels    <- Args[40]
+    orig_range1          <- Args[41]
+    orig_range2          <- Args[42]
+
+    orig_chr1   <- strsplit(orig_range1, ":")[[1]][1]
+    orig_chr2   <- strsplit(orig_range2, ":")[[1]][1]
+    orig_start1 <- as.numeric(strsplit(orig_range1, ":")[[1]][2])
+    orig_start2 <- as.numeric(strsplit(orig_range2, ":")[[1]][2])
 
     output_name <- basename(path.expand(output_name))
     out_path <- file.path(out_dir, output_name)
@@ -5310,6 +6013,18 @@ if (isTRUE(flag_inter)) {
     interval_chr2 <- range_components[4]
     interval_start2 <- as.numeric(range_components[5])
     interval_end2 <- as.numeric(range_components[6])
+
+    # coordinates to bins
+    b_view1 <- interval_to_bins(interval_start1, interval_end1, bin_size)
+    b_view2 <- interval_to_bins(interval_start2, interval_end2, bin_size)
+
+    interval_start1 <- b_view1$first * bin_size
+    interval_end1   <- b_view1$last  * bin_size
+    interval_start2 <- b_view2$first * bin_size
+    interval_end2   <- b_view2$last  * bin_size
+
+    interval_right_edge1 <- bins_to_bp(b_view1, bin_size)[2]
+    interval_right_edge2 <- bins_to_bp(b_view2, bin_size)[2]
 
 
     if (any(grepl("chr", interval_chr1, ignore.case = T)) == FALSE) {
@@ -5346,7 +6061,11 @@ if (isTRUE(flag_inter)) {
     plot_width <- dimensions$width
     plot_height <- dimensions$height
 
-    flip_axes <- (orig_chr1 != interval_chr1)
+    if (orig_chr1 != orig_chr2) {
+      flip_axes <- (orig_chr1 != interval_chr1)
+    } else {
+      flip_axes <- (orig_start1 > orig_start2)
+    }
 
     if (flip_axes) {
       temp_val <- plot_width
@@ -5355,37 +6074,19 @@ if (isTRUE(flag_inter)) {
     }
 
     ## 'chr' prefix handler:
-
     hic_A_chroms <- readHicChroms(path_hic_A)$name
     hic_B_chroms <- readHicChroms(path_hic_B)$name
 
-    if (sum(grepl("chr", hic_A_chroms)) > 0 && sum(grepl("chr", hic_B_chroms)) > 0) {
-      flag_strip_chr <- "no"
-    }
-    if (sum(grepl("chr", hic_A_chroms)) > 0 && sum(grepl("chr", hic_B_chroms)) == 0) {
-      flag_strip_chr <- "A"
-    }
-    if (sum(grepl("chr", hic_B_chroms)) > 0 && sum(grepl("chr", hic_A_chroms)) == 0) {
-      flag_strip_chr <- "B"
-    }
-    if (sum(grepl("chr", hic_A_chroms)) == 0 && sum(grepl("chr", hic_B_chroms)) == 0) {
-      flag_strip_chr <- "yes"
-    }
-
-
-    if (flag_strip_chr == "yes") {
-      new_interval_chr1 <- sub("chr", "", interval_chr1)
-      new_interval_chr2 <- sub("chr", "", interval_chr2)
-    } else if (flag_strip_chr == "B") {
-      new_interval_chr1 <- interval_chr1
-      new_interval_chr2 <- sub("chr", "", interval_chr2)
-    } else if (flag_strip_chr == "A") {
-      new_interval_chr1 <- sub("chr", "", interval_chr1)
-      new_interval_chr2 <- interval_chr2
-    } else if (flag_strip_chr == "no") {
-      new_interval_chr1 <- interval_chr1
-      new_interval_chr2 <- interval_chr2
-    }
+    # straw needs each .hic's own chromosome names; BEDPEs, BEDs, genes and
+    # labels all use the chr-prefixed names from -R
+    strip_A <- !any(grepl("chr", hic_A_chroms))
+    strip_B <- !any(grepl("chr", hic_B_chroms))
+    straw_chr1_A <- if (strip_A) sub("chr", "", interval_chr1) else interval_chr1
+    straw_chr2_A <- if (strip_A) sub("chr", "", interval_chr2) else interval_chr2
+    straw_chr1_B <- if (strip_B) sub("chr", "", interval_chr1) else interval_chr1
+    straw_chr2_B <- if (strip_B) sub("chr", "", interval_chr2) else interval_chr2
+    new_interval_chr1 <- interval_chr1
+    new_interval_chr2 <- interval_chr2
 
 
     if (isFALSE(flag_matrix)) {
@@ -5400,8 +6101,18 @@ if (isTRUE(flag_inter)) {
         n_bedpe <- length(bedpe_files)
         k <- 0L
 
-        for (bedpe_path in bedpe_files) {
-          pairs <- read.table(bedpe_path, as.is = TRUE, header = FALSE)[, 1:6]
+        for (idx in seq_along(bedpe_files)) {
+          bedpe_path <- bedpe_files[idx]
+          # Empty (or otherwise unreadable) files are skipped
+          pairs <- tryCatch(
+            read.table(bedpe_path, as.is = TRUE),
+            error = function(e) NULL
+          )
+          if (is.null(pairs) || nrow(pairs) == 0) {
+            next
+          }
+          
+          pairs <- pairs[, 1:6]
           colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
 
           # Make sure chromosome names have 'chr' prefix
@@ -5413,13 +6124,13 @@ if (isTRUE(flag_inter)) {
           pairs <- pairs[
             (
               (pairs$chr1 == new_interval_chr1 &
-              pairs$start1 >= interval_start1 & pairs$end1 <= interval_end1 &
+              pairs$start1 >= interval_start1 & pairs$end1 <= interval_right_edge1 &
               pairs$chr2 == new_interval_chr2 &
-              pairs$start2 >= interval_start2 & pairs$end2 <= interval_end2) |
+              pairs$start2 >= interval_start2 & pairs$end2 <= interval_right_edge2) |
               (pairs$chr1 == new_interval_chr2 &
-              pairs$start1 >= interval_start2 & pairs$end1 <= interval_end2 &
+              pairs$start1 >= interval_start2 & pairs$end1 <= interval_right_edge2 &
               pairs$chr2 == new_interval_chr1 &
-              pairs$start2 >= interval_start1 & pairs$end2 <= interval_end1)
+              pairs$start2 >= interval_start1 & pairs$end2 <= interval_right_edge1)
             ),
           ]
 
@@ -5428,23 +6139,21 @@ if (isTRUE(flag_inter)) {
           }
 
           # Reorder columns so chr1 always corresponds to interval 1
-          for (idx in 1:nrow(pairs)) {
-            if (pairs[idx, "chr1"] != new_interval_chr1) {
-              pairs[idx, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <-
-                pairs[idx, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
+          for (ri in seq_len(nrow(pairs))) {
+            if (pairs[ri, "chr1"] != new_interval_chr1) {
+              pairs[ri, c("chr1", "start1", "end1", "chr2", "start2", "end2")] <-
+                pairs[ri, c("chr2", "start2", "end2", "chr1", "start1", "end1")]
             }
           }
-          colnames(pairs) <- c("chr1", "start1", "end1", "chr2", "start2", "end2")
-
-          # Adjust end coordinates for half-open binning
-          pairs$end1 <- ifelse(pairs$end1 > pairs$start1, pairs$end1 - 1, pairs$end1)
-          pairs$end2 <- ifelse(pairs$end2 > pairs$start2, pairs$end2 - 1, pairs$end2)
 
           # Convert coordinates to bins
-          pairs$start1_bin <- as.integer(floor(pairs$start1 / bin_size) * bin_size)
-          pairs$end1_bin   <- as.integer(floor(pairs$end1 / bin_size) * bin_size)
-          pairs$start2_bin <- as.integer(floor(pairs$start2 / bin_size) * bin_size)
-          pairs$end2_bin   <- as.integer(floor(pairs$end2 / bin_size) * bin_size)
+          b1 <- interval_to_bins(pairs$start1, pairs$end1, bin_size)
+          b2 <- interval_to_bins(pairs$start2, pairs$end2, bin_size)
+
+          pairs$start1_bin <- as.integer(b1$first * bin_size)
+          pairs$end1_bin   <- as.integer(b1$last  * bin_size)
+          pairs$start2_bin <- as.integer(b2$first * bin_size)
+          pairs$end2_bin   <- as.integer(b2$last  * bin_size)
 
           # Calculate plotting coordinates
           pairs$i     <- (pairs$start1_bin - interval_start1) / bin_size + 1
@@ -5461,13 +6170,15 @@ if (isTRUE(flag_inter)) {
             pairs$j_end <- tmp_i_end
           }
 
-          pairs_by_file[[basename(bedpe_path)]] <- pairs
+          pairs_by_file[[idx]] <- pairs
           k <- k + 1L
         }
 
         # Keep only files that actually contributed pairs
-        pairs_by_file <- pairs_by_file[vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))]
+        keep_mask <- vapply(pairs_by_file, function(x) !is.null(x) && nrow(x) > 0, logical(1))
+        pairs_by_file <- pairs_by_file[keep_mask]
 
+        # Update bedpe count to reflect only files in range
         n_bedpe <- length(pairs_by_file)
 
         if (n_bedpe == 0L) {
@@ -5475,6 +6186,20 @@ if (isTRUE(flag_inter)) {
           bedpe <- "FALSE"
         } else {
           bedpe <- pairs_by_file
+
+          # Keep colors paired with the files that survived filtering
+          bedpe_toks      <- strsplit(bedpe_color, "[[:space:]]+")[[1]]
+          bedpe_toks      <- bedpe_toks[nzchar(bedpe_toks)]
+          surviving_color <- bedpe_toks[which(keep_mask)]
+          surviving_color <- surviving_color[!is.na(surviving_color)]
+          bedpe_color     <- if (length(surviving_color)) paste(surviving_color, collapse = " ") else "#000000"
+
+          # Keep line widths paired with the files that survived filtering
+          lwd_toks      <- strsplit(as.character(bedpe_lwd), "[[:space:]]+")[[1]]
+          lwd_toks      <- lwd_toks[nzchar(lwd_toks)]
+          surviving_lwd <- lwd_toks[which(keep_mask)]
+          surviving_lwd <- surviving_lwd[!is.na(surviving_lwd)]
+          bedpe_lwd     <- if (length(surviving_lwd)) paste(surviving_lwd, collapse = " ") else "0.8"
         }
       }
     }
@@ -5572,8 +6297,8 @@ if (isTRUE(flag_inter)) {
     sparMat1 <- straw(
       norm,
       path_hic_A,
-      paste(new_interval_chr1, interval_start1, interval_end1, sep = ":"),
-      paste(new_interval_chr2, interval_start2, interval_end2, sep = ":"),
+      bins_to_query(straw_chr1_A, b_view1, bin_size),
+      bins_to_query(straw_chr2_A, b_view2, bin_size),
       unit,
       bin_size
     )
@@ -5586,8 +6311,8 @@ if (isTRUE(flag_inter)) {
     sparMat2 <- straw(
       norm,
       path_hic_B,
-      paste(new_interval_chr1, interval_start1, interval_end1, sep = ":"),
-      paste(new_interval_chr2, interval_start2, interval_end2, sep = ":"),
+      bins_to_query(straw_chr1_B, b_view1, bin_size),
+      bins_to_query(straw_chr2_B, b_view2, bin_size),
       unit,
       bin_size
     )
@@ -5602,19 +6327,19 @@ if (isTRUE(flag_inter)) {
 
     denMat1 <- matrix(
       data = 0,
-      nrow = length(seq(interval_start1, interval_end1, bin_size)),
-      ncol = length(seq(interval_start2, interval_end2, bin_size))
+      nrow = b_view1$n,
+      ncol = b_view2$n
     )
-    rownames(denMat1) <- seq(interval_start1, interval_end1, bin_size)
-    colnames(denMat1) <- seq(interval_start2, interval_end2, bin_size)
+    rownames(denMat1) <- bins_to_grid(b_view1, bin_size)
+    colnames(denMat1) <- bins_to_grid(b_view2, bin_size)
 
     denMat2 <- matrix(
       data = 0,
-      nrow = length(seq(interval_start1, interval_end1, bin_size)),
-      ncol = length(seq(interval_start2, interval_end2, bin_size))
+      nrow = b_view1$n,
+      ncol = b_view2$n
     )
-    rownames(denMat2) <- seq(interval_start1, interval_end1, bin_size)
-    colnames(denMat2) <- seq(interval_start2, interval_end2, bin_size)
+    rownames(denMat2) <- bins_to_grid(b_view1, bin_size)
+    colnames(denMat2) <- bins_to_grid(b_view2, bin_size)
 
     # Populate denMat1
     for (i in 1:nrow(sparMat1)) {
@@ -5654,23 +6379,26 @@ if (isTRUE(flag_inter)) {
       tmp_start1 <- interval_start1
       tmp_end1 <- interval_end1
       tmp_len1 <- interval_len1
+      tmp_b1 <- b_view1
 
       new_interval_chr1 <- new_interval_chr2
       interval_start1 <- interval_start2
       interval_end1 <- interval_end2
       interval_len1 <- interval_len2
+      b_view1 <- b_view2
 
       new_interval_chr2 <- tmp_chr1
       interval_start2 <- tmp_start1
       interval_end2 <- tmp_end1
       interval_len2 <- tmp_len1
+      b_view2 <- tmp_b1
     }
 
     if (flag_matrix) {
 
       # first region given is x, second is y
-      row_coords <- seq(interval_start2, interval_end2, by = bin_size)
-      col_coords <- seq(interval_start1, interval_end1, by = bin_size)
+      row_coords <- bins_to_grid(b_view2, bin_size)
+      col_coords <- bins_to_grid(b_view1, bin_size)
 
       row_labels <- sprintf("%s:%d:%d", new_interval_chr2, row_coords, row_coords + bin_size - 1L)
       col_labels <- sprintf("%s:%d:%d", new_interval_chr1, col_coords, col_coords + bin_size - 1L)
@@ -5744,6 +6472,7 @@ if (isTRUE(flag_inter)) {
       ann_style         = ann_style,
       ann_custom        = ann_custom,
       ann_custom_colors = ann_custom_colors,
+      ann_custom_labels = ann_custom_labels,
       genome_build      = genome_build,
       bin_size          = bin_size,
       new_interval_chr1 = new_interval_chr1,

@@ -24,7 +24,7 @@ function help {
     echo "OPTIONS"
     echo
     echo "    -P|--bedpe                  : Path to the bedpe file, without headers"
-    echo "    -A|--sample1                : Name of the sample as it appears on the Tinkerbox."
+    echo "    -A|--sample1                : Name of the sample as it appears on the Tinker box."
     echo "    -G|--genome                 : Genome build used for sample processing"
     echo " [  -O|--out-dir             ]  : Name of the directory to store the output APA plot in"
     echo " [  -B|--sample2             ]  : For two sample delta plots, name of the second sample."
@@ -36,8 +36,8 @@ function help {
     echo " [     --loop_norm           ]  : If TRUE, normalizes APA values by loop count in bedpe. Default FALSE if --inherent FALSE, else TRUE"
     echo " [  -s|--scores              ]  : If TRUE, plots peak value and ratios of peak:corner means. Default TRUE"
     echo " [  -i|--inherent            ]  : If TRUE, normalize contacts using inherent normalization. Default FALSE"
-    echo " [     --sample1_dir         ]  : If not using the tinkerbox, specify the full path to the directory containing sample data. Accepts multiple paths for a cohort."
-    echo " [     --sample2_dir         ]  : If not using the tinkerbox, full path to the second sample directory. Accepts multiple paths for a cohort."
+    echo " [     --sample1_dir         ]  : If not using the Tinker box, specify the full path to the directory containing sample data. Accepts multiple paths for a cohort."
+    echo " [     --sample2_dir         ]  : If not using the Tinker box, full path to the second sample directory. Accepts multiple paths for a cohort."
     echo " [  -h|--help                ]   Help message"
     exit;
 }
@@ -490,48 +490,12 @@ if [ $awk_status -ne 0 ]; then
     exit $awk_status
 fi
 
-#---------------Binify-------------------
+#---------------Trim-------------------
 
-# Create temporary files in /tmp
+# 6 col bedpe from the ordered file. Binifying happens in R
 tmp_trimmed=$(mktemp /tmp/trimmed_bedpe.XXXXXX)
-tmp_binified=$(mktemp /tmp/binified_bedpe.XXXXXX)
-
-# Create 6 col bedpe from the ordered file
 cut -f1-6 "$tmp_ordered" > "$tmp_trimmed"
-
-awk -v r="$r" 'BEGIN { OFS="\t" }
-{
-  len1 = $3 - $2
-  len2 = $6 - $5
-
-  if (len1 <= r && len2 <= r) {
-    # too small to binify, print as is
-    print $1, $2, $3, $4, $5, $6
-
-  } else if (len1 > r && len2 > r) {
-    # binify both anchors
-    for (i = $2; i <= ($3 - r); i += r) {
-      for (j = $5; j <= ($6 - r); j += r) {
-        print $1, i, i + r, $4, j, j + r
-      }
-    }
-
-  } else if (len1 > r) {
-    # only binify anchor1
-    for (i = $2; i <= ($3 - r); i += r) {
-      print $1, i, i + r, $4, $5, $6
-    }
-
-  } else if (len2 > r) {
-    # only binify anchor2
-    for (j = $5; j <= ($6 - r); j += r) {
-      print $1, $2, $3, $4, j, j + r
-    }
-  }
-}' "$tmp_trimmed" > "$tmp_binified"
-
-# Convert tmp_binified to absolute path
-tmp_binified=$(readlink -f "$tmp_binified")
+tmp_trimmed=$(readlink -f "$tmp_trimmed")
 
 # Clean up the ordered temp file
 rm -f "$tmp_ordered"
@@ -587,7 +551,7 @@ then
       "$out_dir/${label_A}_APA.pdf" \
       "${win_size}" \
       "${r}" \
-      "${tmp_binified}" \
+      "${tmp_trimmed}" \
       "${Q}" \
       "${stat_str_A}" \
       "${l}" \
@@ -599,7 +563,6 @@ then
       "${tmp_trimmed}"
 
     rm "$tmp_trimmed"
-    rm "$tmp_binified"
 
 fi
 
@@ -658,7 +621,7 @@ then
       "$out_dir/${label_A}_v_${label_B}_APA.pdf" \
       "${win_size}" \
       "${r}" \
-      "${tmp_binified}" \
+      "${tmp_trimmed}" \
       "${Q}" \
       "${stat_str_A}" \
       "${stat_str_B}" \
@@ -671,7 +634,6 @@ then
       "${tmp_trimmed}"
 
     # Clean up temp files
-    rm "$tmp_binified"
     rm "$tmp_trimmed"
 
 fi

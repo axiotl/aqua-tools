@@ -25,13 +25,13 @@ function help {
     echo
     echo "    -P|--bedpe           : Full path to the bedpe file you want to annotate, without headers"
     echo "    -G|--genome          : The genome build the sample(s) has been processed using: hg19, hg38, or mm10"
-    echo "    -A|--sample1         : Name of the sample as it appears on the Tinkerbox"
+    echo "    -A|--sample1         : Name of the sample as it appears on the Tinker box"
     echo "  [ -B|--sample2       ] : For two sample delta contacts, name of the second sample"
-    echo "  [    --sample1_dir   ] : If not using the tinkerbox, specify the full path to the directory containing sample data"
-    echo "  [    --sample2_dir   ] : If not using the tinkerbox, full path to the second sample directory"
+    echo "  [    --sample1_dir   ] : If not using the Tinker box, specify the full path to the directory containing sample data"
+    echo "  [    --sample2_dir   ] : If not using the Tinker box, full path to the second sample directory"
     echo "  [ -Q|--norm          ] : Which normalization to use: none, cpm, aqua, or abc in lower case"
     echo "  [ -r|--resolution    ] : Resolution in bp for contact value calculation. Default 5000"
-    echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, or sum. Default center"
+    echo "  [ -f|--formula       ] : Arithmetic for contact values: center, max, average, median, or sum. Default center"
     echo "  [ -F|--fix           ] : If FALSE, reports new coordinates using center or max arithmetic. Default TRUE"
     echo "  [    --expand        ] : Expands 1D bedpe feet in both directions by given bin value. Default 0"
     echo "  [ -i|--inherent      ] : If TRUE, hic values transformed to inherent units. Default FALSE"
@@ -192,7 +192,7 @@ then
 fi
 
 if [[ ! -f "$P" ]]; then
-    echo "\n'$P' is not a valid file\n"
+    echo -e "\n'$P' is not a valid file\n"
     exit
 fi
 
@@ -231,6 +231,24 @@ awk_output=$(awk '
 if [[ $? -ne 0 ]]; then
     echo "$awk_output"
     exit 1
+fi
+
+# Check inherent compatibility
+if [[ "$i" == "TRUE" ]]; then
+
+    bedpe_type=$(awk '
+        BEGIN {FS="\t"; cis=0; trans=0}
+        { if ($1 == $4) cis++; else trans++ }
+        END {
+            if (cis > 0 && trans > 0) print "mixed"
+            else if (trans > 0)       print "trans"
+            else                      print "cis"
+        }' "$P")
+
+    if [[ "$bedpe_type" != "cis" ]]; then
+        echo -e "\nInherent normalization is only valid for cis (intrachromosomal) pairs, but '$P' contains trans pairs.\nRe-run without --inherent, or supply a cis-only bedpe.\n"
+        exit 1
+    fi
 fi
 
 #----------------------------------
@@ -403,6 +421,10 @@ if [ "$two_sample" == "TRUE" ]; then
             exit 1
         fi
     else
+        if [ "$i" == "TRUE" ]; then
+            echo -e "\nInherent normalization is not compatible with this sample."
+            exit 1
+        fi
         validate_samples_and_stats "$I" "sample2"
         B="blank"
     fi
