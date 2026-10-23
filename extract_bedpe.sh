@@ -25,7 +25,7 @@ function help {
     echo "---------------"
     echo "OPTIONS"
     echo
-    echo "   -A|--sample1        : Name of the sample as it appears on the Tinkerbox"
+    echo "   -A|--sample1        : Name of the sample as it appears on the Tinker box"
     echo "   -G|--genome         : Genome build used for sample processing"
     echo "   -R|--range          : Range to obtain clusters from, in chr:start:end format"
     echo "  [-r|--resolution   ] : Resolution in base pairs. Only 5000 and 1000 supported. Default 5000"

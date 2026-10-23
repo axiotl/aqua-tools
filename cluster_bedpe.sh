@@ -3,13 +3,6 @@
 data_dir="${LAB_DATA_DIR:-$HOME/lab-data}"
 aqua_dir="${AQUA_TOOLS_DIR:-$HOME/aqua_tools}"
 
-temp_dir=$(mktemp -d cluster_bedpe-XXXXXXXXXX)
-
-cleanup() {
-    rm -rf "$temp_dir"
-}
-trap cleanup EXIT
-
 usage() {
     echo -e "usage : cluster_bedpe.sh -P PATH_TO_BEDPE_FILE [-f FLANK_IN_BASE_PAIR] [-h]"
     echo -e "Use option -h|--help for more information"
@@ -69,4 +62,9 @@ if [ -z "$P" ]; then
     exit 1
 fi
 
-Rscript "$aqua_dir/cluster_bedpe.r" "$P" "$f" "$temp_dir"
+if [ ! -f "$P" ]; then
+    echo "Error: bedpe file not found at path '$P'." >&2
+    exit 1
+fi
+
+Rscript "$aqua_dir/cluster_bedpe.r" "$P" "$f"
